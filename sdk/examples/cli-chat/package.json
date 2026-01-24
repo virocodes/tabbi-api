@@ -1,0 +1,20 @@
+{
+  "name": "cli-chat-example",
+  "version": "1.0.0",
+  "description": "Simple CLI chat example using Agent API SDK",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "start": "npx tsx index.ts",
+    "build": "tsc",
+    "start:built": "node dist/index.js"
+  },
+  "dependencies": {
+    "@agent-api/sdk": "file:../../"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.5"
+  }
+}

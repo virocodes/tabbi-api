@@ -1,0 +1,41 @@
+{
+  "name": "@agent-api/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Agent API",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build",
+    "docs": "typedoc",
+    "docs:serve": "typedoc && npx serve docs"
+  },
+  "devDependencies": {
+    "typedoc": "^0.28.16",
+    "typescript": "^5.4.5"
+  },
+  "keywords": [
+    "agent",
+    "api",
+    "claude",
+    "opencode",
+    "sdk"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/agent-api"
+  }
+}

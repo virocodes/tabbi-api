@@ -1,0 +1,35 @@
+/* Custom styles for Agent API SDK documentation */
+
+:root {
+  --light-color-background: #ffffff;
+  --light-color-background-secondary: #f8f9fa;
+  --light-color-text: #1a1a1a;
+  --light-color-link: #0066cc;
+  --light-color-ts-class: #0066cc;
+  --light-color-ts-interface: #267f99;
+  --light-color-ts-function: #795e26;
+
+  --dark-color-background: #1a1a1a;
+  --dark-color-background-secondary: #242424;
+  --dark-color-text: #f0f0f0;
+  --dark-color-link: #4da6ff;
+  --dark-color-ts-class: #4da6ff;
+  --dark-color-ts-interface: #4ec9b0;
+  --dark-color-ts-function: #dcdcaa;
+}
+
+/* Better code block styling */
+pre {
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+/* Navigation improvements */
+.tsd-navigation {
+  padding: 1rem;
+}
+
+/* Member signature styling */
+.tsd-signature {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}

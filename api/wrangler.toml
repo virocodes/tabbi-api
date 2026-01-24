@@ -1,0 +1,32 @@
+name = "agent-api"
+main = "src/index.ts"
+compatibility_date = "2024-05-12"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+MODAL_API_URL = "https://your-workspace--agent-sandbox.modal.run"
+
+# Secrets (set via wrangler secret put)
+# MODAL_API_SECRET
+# DATABASE_URL
+# UPSTASH_REDIS_URL
+# UPSTASH_REDIS_TOKEN
+# ANTHROPIC_API_KEY
+
+[[durable_objects.bindings]]
+name = "SESSION_AGENT"
+class_name = "SessionAgent"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SessionAgent"]
+
+# Development settings
+[dev]
+port = 8787
+local_protocol = "http"
+
+# Production routes (uncomment and configure for deployment)
+# [[routes]]
+# pattern = "api.your-domain.com/*"
+# custom_domain = true

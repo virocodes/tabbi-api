@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:modal.com)",
+      "WebFetch(domain:opencode.ai)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "WebFetch(domain:developers.cloudflare.com)"
+    ]
+  }
+}
