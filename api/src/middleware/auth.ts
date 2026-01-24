@@ -1,12 +1,22 @@
 /**
  * API Key Authentication Middleware
+ * Validates API keys and sets auth context with request tracing
  */
 
 import { Context, MiddlewareHandler } from "hono";
 import type { Env, AuthContext, APIError } from "../types";
+import { logger } from "../utils/logger";
+import { withRetry } from "../utils/retry";
 
 // API key format: aa_<env>_<32 alphanumeric chars>
 const API_KEY_REGEX = /^aa_(live|test)_[a-zA-Z0-9]{32}$/;
+
+/**
+ * Generate a unique request ID
+ */
+function generateRequestId(): string {
+  return `req_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
+}
 
 /**
  * Hash an API key using SHA-256
@@ -47,13 +57,22 @@ function getEnvironmentFromKey(key: string): "live" | "test" {
 
 /**
  * Authentication middleware
- * Validates API key and sets auth context
+ * Validates API key, generates request ID, and sets auth context
  */
 export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
+  // Generate request ID first for all logging
+  const requestId = generateRequestId();
+  c.set("requestId", requestId);
+  c.header("X-Request-ID", requestId);
+
+  // Create logger with request context
+  const log = logger.child({ requestId });
+
   const authHeader = c.req.header("Authorization");
   const apiKey = extractApiKey(authHeader);
 
   if (!apiKey) {
+    log.warn("Missing or malformed Authorization header");
     const error: APIError = {
       error: {
         code: "INVALID_API_KEY",
@@ -64,6 +83,7 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
   }
 
   if (!isValidKeyFormat(apiKey)) {
+    log.warn("Invalid API key format");
     const error: APIError = {
       error: {
         code: "INVALID_API_KEY",
@@ -78,9 +98,10 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
   const environment = getEnvironmentFromKey(apiKey);
 
   // Lookup key in database
-  const keyData = await lookupApiKey(c, keyHash);
+  const keyData = await lookupApiKey(c, keyHash, log);
 
   if (!keyData) {
+    log.warn("API key not found", { keyPrefix: apiKey.substring(0, 12) });
     const error: APIError = {
       error: {
         code: "INVALID_API_KEY",
@@ -91,6 +112,7 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
   }
 
   if (keyData.revokedAt) {
+    log.warn("API key revoked", { apiKeyId: keyData.id });
     const error: APIError = {
       error: {
         code: "INVALID_API_KEY",
@@ -105,25 +127,35 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
     apiKeyId: keyData.id,
     userId: keyData.userId,
     environment,
+    requestId,
   };
 
   c.set("auth", auth);
+
+  log.info("Request authenticated", {
+    apiKeyId: keyData.id,
+    userId: keyData.userId,
+    environment,
+    path: c.req.path,
+    method: c.req.method,
+  });
 
   await next();
 };
 
 /**
- * Lookup API key in database
+ * Lookup API key in database with retry
  */
 async function lookupApiKey(
   c: Context<{ Bindings: Env }>,
-  keyHash: string
+  keyHash: string,
+  log: ReturnType<typeof logger.child>
 ): Promise<{ id: string; userId: string; revokedAt: string | null } | null> {
   const databaseUrl = c.env.DATABASE_URL;
 
   if (!databaseUrl) {
     // For development without database, use a mock
-    console.warn("DATABASE_URL not set, using mock auth");
+    log.warn("DATABASE_URL not set, using mock auth");
     return {
       id: "mock-api-key-id",
       userId: "mock-user-id",
@@ -132,41 +164,50 @@ async function lookupApiKey(
   }
 
   try {
-    // Use Neon serverless driver pattern
-    const response = await fetch(`${databaseUrl}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    return await withRetry(
+      async () => {
+        const response = await fetch(databaseUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            query: `
+              SELECT id, user_id, revoked_at
+              FROM api_keys
+              WHERE key_hash = $1
+            `,
+            params: [keyHash],
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Database query failed: ${response.status}`);
+        }
+
+        const result = (await response.json()) as {
+          rows: Array<{ id: string; user_id: string; revoked_at: string | null }>;
+        };
+
+        if (result.rows.length === 0) {
+          return null;
+        }
+
+        const row = result.rows[0];
+        return {
+          id: row.id,
+          userId: row.user_id,
+          revokedAt: row.revoked_at,
+        };
       },
-      body: JSON.stringify({
-        query: `
-          SELECT id, user_id, revoked_at
-          FROM api_keys
-          WHERE key_hash = $1
-        `,
-        params: [keyHash],
-      }),
-    });
-
-    if (!response.ok) {
-      console.error("Database query failed:", response.status);
-      return null;
-    }
-
-    const result = (await response.json()) as { rows: Array<{ id: string; user_id: string; revoked_at: string | null }> };
-
-    if (result.rows.length === 0) {
-      return null;
-    }
-
-    const row = result.rows[0];
-    return {
-      id: row.id,
-      userId: row.user_id,
-      revokedAt: row.revoked_at,
-    };
+      {
+        maxAttempts: 2,
+        initialDelayMs: 100,
+        context: "api key lookup",
+      }
+    );
   } catch (error) {
-    console.error("Error looking up API key:", error);
+    log.error("Error looking up API key", error);
     return null;
   }
 }
@@ -174,4 +215,4 @@ async function lookupApiKey(
 /**
  * Hash API key utility (exported for key generation)
  */
-export { hashApiKey };
+export { hashApiKey, generateRequestId };

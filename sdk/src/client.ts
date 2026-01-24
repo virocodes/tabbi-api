@@ -20,6 +20,23 @@ const DEFAULT_BASE_URL = "https://api.agent-api.com";
 const DEFAULT_TIMEOUT = 30000;
 
 /**
+ * Generate a UUID v4 compatible with all environments
+ */
+function generateUUID(): string {
+  // Use crypto.randomUUID if available (Node 19+, modern browsers)
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  // Fallback for older environments
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
  * Main client for interacting with the Agent API.
  *
  * @example
@@ -149,7 +166,7 @@ export class AgentAPI {
       if (!response.ok) {
         let errorData: APIErrorResponse;
         try {
-          errorData = await response.json() as APIErrorResponse;
+          errorData = (await response.json()) as APIErrorResponse;
         } catch {
           throw new AgentAPIError(
             "UNKNOWN_ERROR",
@@ -181,10 +198,7 @@ export class AgentAPI {
    * Make a streaming request to the API.
    * @internal
    */
-  async streamRequest(
-    path: string,
-    options: RequestInit = {}
-  ): Promise<Response> {
+  async streamRequest(path: string, options: RequestInit = {}): Promise<Response> {
     const url = `${this.baseUrl}${path}`;
 
     const response = await fetch(url, {
@@ -199,7 +213,7 @@ export class AgentAPI {
     if (!response.ok) {
       let errorData: APIErrorResponse;
       try {
-        errorData = await response.json() as APIErrorResponse;
+        errorData = (await response.json()) as APIErrorResponse;
       } catch {
         throw new AgentAPIError(
           "UNKNOWN_ERROR",
@@ -314,10 +328,7 @@ export class Session {
    * console.log("Final response:", message.content);
    * ```
    */
-  async sendMessage(
-    content: string,
-    options: SendMessageOptions = {}
-  ): Promise<Message> {
+  async sendMessage(content: string, options: SendMessageOptions = {}): Promise<Message> {
     const response = await this.client.streamRequest(
       `/v1/sessions/${this.id}/messages`,
       {
@@ -430,7 +441,7 @@ export class Session {
 
     // Return the assembled message
     return {
-      id: messageId || crypto.randomUUID(),
+      id: messageId || generateUUID(),
       role: "assistant",
       content: assistantContent,
       createdAt: new Date().toISOString(),
@@ -447,7 +458,7 @@ export class Session {
    * ```typescript
    * const files = await session.listFiles("/");
    * for (const file of files) {
-   *   console.log(`${file.isDirectory ? "📁" : "📄"} ${file.name}`);
+   *   console.log(`${file.isDirectory ? "D" : "F"} ${file.name}`);
    * }
    * ```
    */
@@ -524,7 +535,7 @@ export class Session {
    * Wait for the session to be ready.
    *
    * Call this after creating a session to ensure the sandbox is initialized
-   * before sending messages.
+   * before sending messages. Uses exponential backoff for polling.
    *
    * @param timeoutMs - Maximum time to wait in milliseconds
    * @throws {@link AgentAPIError} with code `TIMEOUT` if timeout exceeded
@@ -539,6 +550,8 @@ export class Session {
    */
   async waitForReady(timeoutMs: number = 60000): Promise<void> {
     const startTime = Date.now();
+    let pollInterval = 500; // Start with 500ms
+    const maxPollInterval = 3000; // Max 3 seconds between polls
 
     while (this._status === "starting") {
       if (Date.now() - startTime > timeoutMs) {
@@ -549,7 +562,9 @@ export class Session {
       await this.refresh();
 
       if (this._status === "starting") {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        // Exponential backoff with cap
+        pollInterval = Math.min(pollInterval * 1.5, maxPollInterval);
       }
     }
 

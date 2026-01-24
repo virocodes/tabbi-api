@@ -184,7 +184,7 @@ export declare class Session {
      * ```typescript
      * const files = await session.listFiles("/");
      * for (const file of files) {
-     *   console.log(`${file.isDirectory ? "📁" : "📄"} ${file.name}`);
+     *   console.log(`${file.isDirectory ? "D" : "F"} ${file.name}`);
      * }
      * ```
      */
@@ -235,7 +235,7 @@ export declare class Session {
      * Wait for the session to be ready.
      *
      * Call this after creating a session to ensure the sandbox is initialized
-     * before sending messages.
+     * before sending messages. Uses exponential backoff for polling.
      *
      * @param timeoutMs - Maximum time to wait in milliseconds
      * @throws {@link AgentAPIError} with code `TIMEOUT` if timeout exceeded

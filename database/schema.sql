@@ -27,7 +27,7 @@ CREATE INDEX idx_api_keys_user_id ON api_keys(user_id);
 CREATE TABLE sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     api_key_id UUID NOT NULL REFERENCES api_keys(id),
-    status VARCHAR(20) DEFAULT 'starting' CHECK (status IN ('starting', 'running', 'paused', 'terminated', 'error')),
+    status VARCHAR(20) DEFAULT 'starting' CHECK (status IN ('starting', 'running', 'paused', 'terminated', 'error', 'idle')),
     repo VARCHAR(255),                          -- Git repository URL or owner/repo
     snapshot_id VARCHAR(255),                   -- Modal snapshot ID when paused
     sandbox_id VARCHAR(255),                    -- Current Modal sandbox ID
@@ -40,6 +40,8 @@ CREATE TABLE sessions (
 CREATE INDEX idx_sessions_api_key_id ON sessions(api_key_id);
 CREATE INDEX idx_sessions_status ON sessions(status);
 CREATE INDEX idx_sessions_created_at ON sessions(created_at DESC);
+-- Composite index for common query pattern (list active sessions by API key)
+CREATE INDEX idx_sessions_api_key_status ON sessions(api_key_id, status);
 
 -- Usage Records table
 -- Tracks usage events for billing and analytics
@@ -58,6 +60,8 @@ CREATE INDEX idx_usage_records_api_key_id ON usage_records(api_key_id);
 CREATE INDEX idx_usage_records_session_id ON usage_records(session_id);
 CREATE INDEX idx_usage_records_event_type ON usage_records(event_type);
 CREATE INDEX idx_usage_records_created_at ON usage_records(created_at DESC);
+-- Composite index for billing queries (usage by API key in time range)
+CREATE INDEX idx_usage_records_api_key_created ON usage_records(api_key_id, created_at DESC);
 
 -- Function to update last_used_at on api_keys
 CREATE OR REPLACE FUNCTION update_api_key_last_used()

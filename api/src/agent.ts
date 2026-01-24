@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 import type { SessionState, Message, APIError, FileInfo, Env } from "./types";
 import { ModalClient } from "./services/modal";
 import { OpenCodeClient } from "./services/opencode";
+import { logger, Logger } from "./utils/logger";
 
 // SQLite schema for session state
 const SCHEMA = `
@@ -25,13 +26,23 @@ const SCHEMA = `
   );
 `;
 
+// Configuration stored once during initialization
+interface SessionConfig {
+  anthropicApiKey: string;
+  modalApiUrl: string;
+  modalApiSecret: string;
+  modalEnvironment: "dev" | "prod";
+}
+
 export class SessionAgent extends DurableObject {
   private sql: SqlStorage;
   private initialized = false;
+  private log: Logger;
 
   constructor(state: DurableObjectState, _env: Env) {
     super(state, _env);
     this.sql = state.storage.sql;
+    this.log = logger.child({ component: "SessionAgent" });
   }
 
   private async ensureSchema(): Promise<void> {
@@ -67,6 +78,28 @@ export class SessionAgent extends DurableObject {
     );
   }
 
+  private async getConfig(): Promise<SessionConfig | null> {
+    await this.ensureSchema();
+
+    const result = this.sql.exec("SELECT value FROM session_state WHERE key = 'config'");
+    const rows = [...result];
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    return JSON.parse(rows[0].value as string) as SessionConfig;
+  }
+
+  private async setConfig(config: SessionConfig): Promise<void> {
+    await this.ensureSchema();
+
+    this.sql.exec(
+      "INSERT OR REPLACE INTO session_state (key, value) VALUES ('config', ?)",
+      JSON.stringify(config)
+    );
+  }
+
   private async addMessage(message: Message): Promise<void> {
     await this.ensureSchema();
 
@@ -84,6 +117,8 @@ export class SessionAgent extends DurableObject {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+    const requestId = request.headers.get("X-Request-ID") || "unknown";
+    this.log = logger.child({ component: "SessionAgent", requestId });
 
     try {
       if (path === "/initialize" && request.method === "POST") {
@@ -114,13 +149,13 @@ export class SessionAgent extends DurableObject {
         return this.handleGetSandboxId();
       }
 
-      if (path === "/debug-fetch" && request.method === "POST") {
-        return this.handleDebugFetch(request);
+      if (path === "/health" && request.method === "GET") {
+        return this.handleHealth();
       }
 
       return new Response("Not Found", { status: 404 });
     } catch (error) {
-      console.error("SessionAgent error:", error);
+      this.log.error("SessionAgent error", error);
       const apiError: APIError = {
         error: {
           code: "INTERNAL_ERROR",
@@ -129,6 +164,18 @@ export class SessionAgent extends DurableObject {
       };
       return Response.json(apiError, { status: 500 });
     }
+  }
+
+  /**
+   * Health check endpoint
+   */
+  private async handleHealth(): Promise<Response> {
+    const state = await this.getState();
+    return Response.json({
+      healthy: true,
+      hasState: !!state,
+      status: state?.status || "uninitialized",
+    });
   }
 
   /**
@@ -144,13 +191,26 @@ export class SessionAgent extends DurableObject {
       anthropicApiKey: string;
       modalApiUrl: string;
       modalApiSecret: string;
+      modalEnvironment?: "dev" | "prod";
     }>();
+
+    this.log = this.log.child({ sessionId: body.sessionId });
 
     // Check if already initialized
     const existingState = await this.getState();
     if (existingState) {
+      this.log.info("Session already initialized, returning existing state");
       return Response.json(existingState);
     }
+
+    // Store configuration securely (not passed in every request)
+    const config: SessionConfig = {
+      anthropicApiKey: body.anthropicApiKey,
+      modalApiUrl: body.modalApiUrl,
+      modalApiSecret: body.modalApiSecret,
+      modalEnvironment: body.modalEnvironment || "dev",
+    };
+    await this.setConfig(config);
 
     // Create initial state
     const now = new Date().toISOString();
@@ -161,7 +221,6 @@ export class SessionAgent extends DurableObject {
       sandboxUrl: null,
       snapshotId: null,
       opencodeSessionId: null,
-      messages: [],
       isProcessing: false,
       repo: body.repo || null,
       createdAt: now,
@@ -180,15 +239,11 @@ export class SessionAgent extends DurableObject {
 
     await this.setState(state);
 
+    this.log.info("Session initialized, starting sandbox creation");
+
     // Start sandbox creation in background
     this.ctx.waitUntil(
-      this.createSandbox(
-        body.modalApiUrl,
-        body.modalApiSecret,
-        body.anthropicApiKey,
-        body.repo,
-        body.gitToken
-      )
+      this.createSandbox(config, body.repo, body.gitToken)
     );
 
     return Response.json(state, { status: 201 });
@@ -198,33 +253,44 @@ export class SessionAgent extends DurableObject {
    * Create sandbox asynchronously
    */
   private async createSandbox(
-    modalApiUrl: string,
-    modalApiSecret: string,
-    anthropicApiKey: string,
+    config: SessionConfig,
     repo?: string,
     gitToken?: string
   ): Promise<void> {
-    const modal = new ModalClient(modalApiUrl, modalApiSecret);
+    const modal = new ModalClient({
+      baseUrl: config.modalApiUrl,
+      apiSecret: config.modalApiSecret,
+      environment: config.modalEnvironment,
+    });
 
     try {
-      const result = await modal.createSandbox(anthropicApiKey, repo, gitToken);
+      this.log.info("Creating Modal sandbox");
+      const result = await modal.createSandbox(config.anthropicApiKey, repo, gitToken);
 
       const state = await this.getState();
-      if (!state) return;
+      if (!state) {
+        this.log.error("State disappeared during sandbox creation");
+        return;
+      }
 
       state.sandboxId = result.sandbox_id;
       state.sandboxUrl = result.tunnel_url;
-      state.status = "idle";
       state.lastActivityAt = new Date().toISOString();
+
+      this.log.info("Sandbox created, initializing OpenCode session", {
+        sandboxId: result.sandbox_id,
+      });
 
       // Initialize OpenCode session
       const opencode = new OpenCodeClient(result.tunnel_url);
       const session = await opencode.getOrCreateSession();
       state.opencodeSessionId = session.id;
+      state.status = "idle";
 
       await this.setState(state);
+      this.log.info("Session ready", { opencodeSessionId: session.id });
     } catch (error) {
-      console.error("Sandbox creation failed:", error);
+      this.log.error("Sandbox creation failed", error);
 
       const state = await this.getState();
       if (!state) return;
@@ -235,14 +301,15 @@ export class SessionAgent extends DurableObject {
   }
 
   /**
-   * Handle prompt streaming
+   * Handle prompt streaming - returns immediately, doesn't block waiting for sandbox
    */
   private async handlePromptStream(request: Request): Promise<Response> {
     const body = await request.json<{
       content: string;
-      anthropicApiKey: string;
-      modalApiUrl: string;
-      modalApiSecret: string;
+      anthropicApiKey?: string;
+      modalApiUrl?: string;
+      modalApiSecret?: string;
+      modalEnvironment?: string;
     }>();
 
     const state = await this.getState();
@@ -267,15 +334,44 @@ export class SessionAgent extends DurableObject {
       return Response.json(error, { status: 409 });
     }
 
+    // Get stored config
+    const config = await this.getConfig();
+    if (!config) {
+      const error: APIError = {
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Session configuration not found",
+        },
+      };
+      return Response.json(error, { status: 500 });
+    }
+
+    // If session is still starting, return error immediately - client should poll
+    if (state.status === "starting") {
+      const error: APIError = {
+        error: {
+          code: "SESSION_BUSY",
+          message: "Session is still starting. Poll GET /v1/sessions/:id for status.",
+        },
+      };
+      return Response.json(error, { status: 409 });
+    }
+
     // Auto-resume if paused
     if (state.status === "paused" && state.snapshotId) {
+      this.log.info("Auto-resuming paused session");
       state.status = "starting";
       state.isProcessing = true;
       await this.setState(state);
 
-      const modal = new ModalClient(body.modalApiUrl, body.modalApiSecret);
+      const modal = new ModalClient({
+        baseUrl: config.modalApiUrl,
+        apiSecret: config.modalApiSecret,
+        environment: config.modalEnvironment,
+      });
+
       try {
-        const result = await modal.resumeSandbox(state.snapshotId, body.anthropicApiKey);
+        const result = await modal.resumeSandbox(state.snapshotId, config.anthropicApiKey);
         state.sandboxId = result.sandbox_id;
         state.sandboxUrl = result.tunnel_url;
         state.snapshotId = null;
@@ -286,6 +382,7 @@ export class SessionAgent extends DurableObject {
         state.status = "running";
         await this.setState(state);
       } catch (error) {
+        this.log.error("Failed to resume sandbox", error);
         state.status = "error";
         state.isProcessing = false;
         await this.setState(state);
@@ -300,28 +397,7 @@ export class SessionAgent extends DurableObject {
       }
     }
 
-    // Wait for sandbox to be ready
-    if (state.status === "starting") {
-      for (let i = 0; i < 60; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        const currentState = await this.getState();
-        if (!currentState) break;
-        if (currentState.status === "idle" || currentState.status === "running") {
-          Object.assign(state, currentState);
-          break;
-        }
-        if (currentState.status === "error") {
-          const apiError: APIError = {
-            error: {
-              code: "SANDBOX_CREATE_FAILED",
-              message: "Sandbox creation failed",
-            },
-          };
-          return Response.json(apiError, { status: 500 });
-        }
-      }
-    }
-
+    // Verify sandbox is ready
     if (!state.sandboxUrl || !state.opencodeSessionId) {
       const error: APIError = {
         error: {
@@ -346,84 +422,97 @@ export class SessionAgent extends DurableObject {
     };
     await this.addMessage(userMessage);
 
-    // Create SSE stream - let runtime handle buffering naturally
+    // Create SSE stream
     const encoder = new TextEncoder();
     const { readable, writable } = new TransformStream();
 
-    // Fire-and-forget streaming - use waitUntil to ensure background work completes
-    // This is critical: without waitUntil, the runtime may not properly execute background work
+    // Fire-and-forget streaming
     this.ctx.waitUntil(
       (async () => {
         const streamingStartTime = Date.now();
-        console.log(`[agent] Starting streaming for session ${state.sessionId}`);
+        this.log.info("Starting message streaming");
 
-      try {
-        // Send initial events using a temporary writer
-        const initialWriter = writable.getWriter();
-        await initialWriter.write(
-          encoder.encode(
-            `data: ${JSON.stringify({ type: "session.running", data: { sessionId: state.sessionId }, timestamp: new Date().toISOString() })}\n\n`
-          )
-        );
-        await initialWriter.write(
-          encoder.encode(
-            `data: ${JSON.stringify({ type: "message.user", data: { content: body.content }, timestamp: new Date().toISOString() })}\n\n`
-          )
-        );
-        console.log(`[agent] Initial events written in ${Date.now() - streamingStartTime}ms`);
-
-        // Release the lock so pipeTo() can use the writable
-        initialWriter.releaseLock();
-
-        // Get OpenCode stream
-        console.log(`[agent] Calling opencode.sendMessage to ${state.sandboxUrl}...`);
-        const sendMessageStart = Date.now();
-        const opencode = new OpenCodeClient(state.sandboxUrl!);
-        const stream = await opencode.sendMessage(state.opencodeSessionId!, body.content);
-        console.log(`[agent] opencode.sendMessage completed in ${Date.now() - sendMessageStart}ms`);
-
-        // Pipe directly - this is the key fix for real-time streaming
-        // pipeTo() is non-blocking and lets data flow through immediately
-        console.log(`[agent] Starting pipeTo...`);
-        const pipeStart = Date.now();
-        await stream.pipeTo(writable, { preventClose: true });
-        console.log(`[agent] pipeTo completed in ${Date.now() - pipeStart}ms`);
-
-        // Send final idle event
-        const finalWriter = writable.getWriter();
-        await finalWriter.write(
-          encoder.encode(
-            `data: ${JSON.stringify({ type: "session.idle", data: { sessionId: state.sessionId }, timestamp: new Date().toISOString() })}\n\n`
-          )
-        );
-        await finalWriter.close();
-      } catch (error) {
-        console.error("Stream error:", error);
         try {
-          const errorWriter = writable.getWriter();
-          await errorWriter.write(
+          // Send initial events
+          const initialWriter = writable.getWriter();
+          await initialWriter.write(
             encoder.encode(
-              `data: ${JSON.stringify({ type: "error", data: { code: "STREAM_ERROR", message: error instanceof Error ? error.message : "Stream failed" }, timestamp: new Date().toISOString() })}\n\n`
+              `data: ${JSON.stringify({
+                type: "session.running",
+                data: { sessionId: state.sessionId },
+                timestamp: new Date().toISOString(),
+              })}\n\n`
             )
           );
-          await errorWriter.close();
-        } catch {
-          // Writer may already be closed
+          await initialWriter.write(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: "message.user",
+                data: { content: body.content },
+                timestamp: new Date().toISOString(),
+              })}\n\n`
+            )
+          );
+
+          // Release the lock so pipeTo() can use the writable
+          initialWriter.releaseLock();
+
+          // Get OpenCode stream
+          this.log.info("Connecting to OpenCode");
+          const opencode = new OpenCodeClient(state.sandboxUrl!);
+          const stream = await opencode.sendMessage(state.opencodeSessionId!, body.content);
+
+          // Pipe directly for real-time streaming
+          await stream.pipeTo(writable, { preventClose: true });
+
+          this.log.info("Stream completed", { durationMs: Date.now() - streamingStartTime });
+
+          // Send final idle event
+          const finalWriter = writable.getWriter();
+          await finalWriter.write(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: "session.idle",
+                data: { sessionId: state.sessionId },
+                timestamp: new Date().toISOString(),
+              })}\n\n`
+            )
+          );
+          await finalWriter.close();
+        } catch (error) {
+          this.log.error("Stream error", error);
+          try {
+            const errorWriter = writable.getWriter();
+            await errorWriter.write(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  type: "error",
+                  data: {
+                    code: "STREAM_ERROR",
+                    message: error instanceof Error ? error.message : "Stream failed",
+                  },
+                  timestamp: new Date().toISOString(),
+                })}\n\n`
+              )
+            );
+            await errorWriter.close();
+          } catch {
+            // Writer may already be closed
+          }
+        } finally {
+          // Update state
+          const currentState = await this.getState();
+          if (currentState) {
+            currentState.isProcessing = false;
+            currentState.status = "idle";
+            currentState.lastActivityAt = new Date().toISOString();
+            await this.setState(currentState);
+          }
         }
-      } finally {
-        // Update state
-        const currentState = await this.getState();
-        if (currentState) {
-          currentState.isProcessing = false;
-          currentState.status = "idle";
-          currentState.lastActivityAt = new Date().toISOString();
-          await this.setState(currentState);
-        }
-      }
-    })()
+      })()
     );
 
-    // Return immediately - don't wait for streaming to complete
+    // Return immediately
     return new Response(readable, {
       headers: {
         "Content-Type": "text/event-stream",
@@ -438,9 +527,6 @@ export class SessionAgent extends DurableObject {
    * Handle file operations
    */
   private async handleFiles(request: Request, path: string): Promise<Response> {
-    const modalApiUrl = request.headers.get("X-Modal-Url") || "";
-    const modalApiSecret = request.headers.get("X-Modal-Secret") || "";
-
     const state = await this.getState();
     if (!state || !state.sandboxId) {
       const error: APIError = {
@@ -452,7 +538,23 @@ export class SessionAgent extends DurableObject {
       return Response.json(error, { status: 404 });
     }
 
-    const modal = new ModalClient(modalApiUrl, modalApiSecret);
+    const config = await this.getConfig();
+    if (!config) {
+      const error: APIError = {
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Session configuration not found",
+        },
+      };
+      return Response.json(error, { status: 500 });
+    }
+
+    const modal = new ModalClient({
+      baseUrl: config.modalApiUrl,
+      apiSecret: config.modalApiSecret,
+      environment: config.modalEnvironment,
+    });
+
     const url = new URL(request.url);
     const isListing = url.searchParams.get("list") === "true";
 
@@ -470,6 +572,7 @@ export class SessionAgent extends DurableObject {
 
         return Response.json({ files });
       } catch (error) {
+        this.log.error("Failed to list files", error);
         const apiError: APIError = {
           error: {
             code: "INTERNAL_ERROR",
@@ -500,6 +603,7 @@ export class SessionAgent extends DurableObject {
           return Response.json(apiError, { status: 404 });
         }
 
+        this.log.error("Failed to read file", error);
         const apiError: APIError = {
           error: {
             code: "INTERNAL_ERROR",
@@ -515,20 +619,25 @@ export class SessionAgent extends DurableObject {
    * Handle session termination
    */
   private async handleTerminate(request: Request): Promise<Response> {
-    const modalApiUrl = request.headers.get("X-Modal-Url") || "";
-    const modalApiSecret = request.headers.get("X-Modal-Secret") || "";
-
     const state = await this.getState();
     if (!state) {
       return Response.json({ status: "not_found" }, { status: 404 });
     }
 
-    if (state.sandboxId) {
-      const modal = new ModalClient(modalApiUrl, modalApiSecret);
+    const config = await this.getConfig();
+
+    if (state.sandboxId && config) {
+      const modal = new ModalClient({
+        baseUrl: config.modalApiUrl,
+        apiSecret: config.modalApiSecret,
+        environment: config.modalEnvironment,
+      });
+
       try {
         await modal.terminateSandbox(state.sandboxId);
+        this.log.info("Sandbox terminated", { sandboxId: state.sandboxId });
       } catch (error) {
-        console.error("Failed to terminate sandbox:", error);
+        this.log.error("Failed to terminate sandbox", error);
       }
     }
 
@@ -571,146 +680,6 @@ export class SessionAgent extends DurableObject {
     }
 
     return Response.json({ sandboxId: state.sandboxId });
-  }
-
-  /**
-   * Debug endpoint to test fetch to OpenCode directly (blocking)
-   */
-  private async handleDebugFetch(request: Request): Promise<Response> {
-    const state = await this.getState();
-    if (!state || !state.sandboxUrl || !state.opencodeSessionId) {
-      return Response.json({ error: "Session not ready" }, { status: 400 });
-    }
-
-    const body = await request.json<{ content?: string }>();
-    const content = body.content || "test";
-
-    const results: Record<string, unknown> = {
-      sandboxUrl: state.sandboxUrl,
-      sessionId: state.opencodeSessionId,
-      tests: {},
-    };
-
-    // Test 1: Health check
-    console.log("[debug] Testing health endpoint...");
-    const healthStart = Date.now();
-    try {
-      const healthRes = await fetch(`${state.sandboxUrl}/global/health`);
-      const healthData = await healthRes.text();
-      results.tests = {
-        ...results.tests as object,
-        health: {
-          status: healthRes.status,
-          time: Date.now() - healthStart,
-          data: healthData,
-        },
-      };
-      console.log(`[debug] Health check completed in ${Date.now() - healthStart}ms`);
-    } catch (e) {
-      results.tests = {
-        ...results.tests as object,
-        health: { error: String(e), time: Date.now() - healthStart },
-      };
-    }
-
-    // Test 2: List sessions
-    console.log("[debug] Testing list sessions...");
-    const listStart = Date.now();
-    try {
-      const listRes = await fetch(`${state.sandboxUrl}/session`);
-      const listData = await listRes.text();
-      results.tests = {
-        ...results.tests as object,
-        listSessions: {
-          status: listRes.status,
-          time: Date.now() - listStart,
-          data: listData.slice(0, 500),
-        },
-      };
-      console.log(`[debug] List sessions completed in ${Date.now() - listStart}ms`);
-    } catch (e) {
-      results.tests = {
-        ...results.tests as object,
-        listSessions: { error: String(e), time: Date.now() - listStart },
-      };
-    }
-
-    // Test 3: POST message (the one that's hanging)
-    console.log("[debug] Testing POST message...");
-    const postStart = Date.now();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      console.log("[debug] POST message timeout after 10s");
-      controller.abort();
-    }, 10000);
-
-    try {
-      const postRes = await fetch(
-        `${state.sandboxUrl}/session/${state.opencodeSessionId}/message`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ parts: [{ type: "text", text: content }] }),
-          signal: controller.signal,
-        }
-      );
-      clearTimeout(timeoutId);
-      const postData = await postRes.text();
-      results.tests = {
-        ...results.tests as object,
-        postMessage: {
-          status: postRes.status,
-          time: Date.now() - postStart,
-          data: postData.slice(0, 500),
-        },
-      };
-      console.log(`[debug] POST message completed in ${Date.now() - postStart}ms`);
-    } catch (e) {
-      clearTimeout(timeoutId);
-      results.tests = {
-        ...results.tests as object,
-        postMessage: { error: String(e), time: Date.now() - postStart },
-      };
-    }
-
-    // Test 4: GET /event SSE endpoint
-    console.log("[debug] Testing GET /event...");
-    const eventStart = Date.now();
-    const eventController = new AbortController();
-    const eventTimeoutId = setTimeout(() => {
-      console.log("[debug] GET /event timeout after 5s");
-      eventController.abort();
-    }, 5000);
-
-    try {
-      const eventRes = await fetch(`${state.sandboxUrl}/event`, {
-        signal: eventController.signal,
-      });
-      clearTimeout(eventTimeoutId);
-      // Just check if we can connect, don't read the stream
-      results.tests = {
-        ...results.tests as object,
-        eventStream: {
-          status: eventRes.status,
-          time: Date.now() - eventStart,
-          hasBody: !!eventRes.body,
-          headers: Object.fromEntries(eventRes.headers.entries()),
-        },
-      };
-      console.log(`[debug] GET /event connected in ${Date.now() - eventStart}ms`);
-      // Cancel the stream to clean up
-      eventRes.body?.cancel();
-    } catch (e) {
-      clearTimeout(eventTimeoutId);
-      results.tests = {
-        ...results.tests as object,
-        eventStream: { error: String(e), time: Date.now() - eventStart },
-      };
-    }
-
-    return Response.json(results, {
-      headers: { "Content-Type": "application/json" },
-    });
   }
 
   /**

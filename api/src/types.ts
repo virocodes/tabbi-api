@@ -1,5 +1,6 @@
 /**
  * Agent API Type Definitions
+ * Single source of truth for all API types
  */
 
 // ============================================================================
@@ -15,11 +16,11 @@ export interface SessionState {
   sandboxUrl: string | null;
   snapshotId: string | null;
   opencodeSessionId: string | null;
-  messages: Message[];
   isProcessing: boolean;
   repo: string | null;
   createdAt: string;
   lastActivityAt: string;
+  // Ownership stored separately in SQL, not in state object
 }
 
 export interface Message {
@@ -128,6 +129,7 @@ export interface ErrorEvent {
 // ============================================================================
 
 export type ErrorCode =
+  | "VALIDATION_ERROR"
   | "INVALID_API_KEY"
   | "SESSION_NOT_OWNED"
   | "SESSION_NOT_FOUND"
@@ -136,11 +138,12 @@ export type ErrorCode =
   | "RATE_LIMIT_EXCEEDED"
   | "SANDBOX_CREATE_FAILED"
   | "SANDBOX_TIMEOUT"
+  | "STREAM_ERROR"
   | "INTERNAL_ERROR";
 
 export interface APIError {
   error: {
-    code: ErrorCode;
+    code: ErrorCode | string;
     message: string;
     details?: Record<string, unknown>;
   };
@@ -154,64 +157,7 @@ export interface AuthContext {
   apiKeyId: string;
   userId: string;
   environment: "live" | "test";
-}
-
-// ============================================================================
-// Modal API Types
-// ============================================================================
-
-export interface ModalCreateSandboxRequest {
-  repo?: string;
-  pat?: string;
-  anthropic_api_key: string;
-}
-
-export interface ModalCreateSandboxResponse {
-  sandbox_id: string;
-  tunnel_url: string;
-}
-
-export interface ModalPauseSandboxResponse {
-  snapshot_id: string;
-}
-
-export interface ModalResumeSandboxResponse {
-  sandbox_id: string;
-  tunnel_url: string;
-}
-
-export interface ModalFileInfo {
-  name: string;
-  path: string;
-  is_directory: boolean;
-  size?: number;
-}
-
-export interface ModalListFilesResponse {
-  files: ModalFileInfo[];
-}
-
-export interface ModalReadFileResponse {
-  content: string;
-  encoding: string;
-}
-
-// ============================================================================
-// OpenCode API Types
-// ============================================================================
-
-export interface OpenCodeSession {
-  id: string;
-  status: "idle" | "running";
-}
-
-export interface OpenCodeMessageRequest {
-  content: string;
-}
-
-export interface OpenCodeEvent {
-  type: string;
-  data: Record<string, unknown>;
+  requestId: string; // Added for request tracing
 }
 
 // ============================================================================
@@ -225,6 +171,7 @@ export interface Env {
   // Environment variables
   MODAL_API_URL: string;
   MODAL_API_SECRET: string;
+  MODAL_ENVIRONMENT?: "dev" | "prod"; // Added: configurable Modal environment
   DATABASE_URL: string;
   UPSTASH_REDIS_URL: string;
   UPSTASH_REDIS_TOKEN: string;
@@ -235,5 +182,6 @@ export interface Env {
 declare module "hono" {
   interface ContextVariableMap {
     auth: AuthContext;
+    requestId: string;
   }
 }

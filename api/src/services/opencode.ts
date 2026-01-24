@@ -3,13 +3,16 @@
  * Communicates with OpenCode server running in Modal sandbox
  */
 
+import { logger } from "../utils/logger";
+
 export interface OpenCodeSession {
   id: string;
   title?: string;
 }
 
-export class OpenCodeClientWrapper {
+export class OpenCodeClient {
   private baseUrl: string;
+  private log = logger.child({ service: "opencode" });
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
@@ -46,9 +49,9 @@ export class OpenCodeClientWrapper {
     // Handle both formats: { data: [...] } or direct array
     const sessions = Array.isArray(result)
       ? result
-      : ((result as { data?: Array<{ id: string; title?: string }> }).data ?? []);
+      : (result.data ?? []);
 
-    return sessions.map((s: { id: string; title?: string }) => ({
+    return sessions.map((s) => ({
       id: s.id,
       title: s.title,
     }));
@@ -76,8 +79,7 @@ export class OpenCodeClientWrapper {
       | { data?: { id: string; title?: string } };
 
     // Handle both formats: { data: {...} } or direct object with id
-    const session =
-      "id" in result ? result : (result as { data?: { id: string; title?: string } }).data;
+    const session = "id" in result ? result : result.data;
 
     if (!session || !session.id) {
       throw new Error("Failed to create session - no id in response");
@@ -112,15 +114,15 @@ export class OpenCodeClientWrapper {
     const startTime = Date.now();
 
     // Subscribe to events FIRST - before sending the message
-    // This ensures we catch all streaming events during processing
-    console.log(`[opencode] sendMessage: connecting to event stream FIRST...`);
+    this.log.info("Connecting to event stream", { sessionId });
     const eventStreamStart = Date.now();
     const eventStream = await this.createEventStream();
-    console.log(`[opencode] sendMessage: event stream connected in ${Date.now() - eventStreamStart}ms`);
+    this.log.info("Event stream connected", {
+      sessionId,
+      durationMs: Date.now() - eventStreamStart,
+    });
 
     // NOW send the message - fire and forget, don't await the response
-    // The response will come through the event stream
-    console.log(`[opencode] sendMessage: starting POST to ${this.baseUrl}/session/${sessionId}/message`);
     const url = `${this.baseUrl}/session/${sessionId}/message`;
 
     // Fire and forget - don't await, just send
@@ -134,13 +136,19 @@ export class OpenCodeClientWrapper {
       }),
     })
       .then((response) => {
-        console.log(`[opencode] sendMessage: POST completed in ${Date.now() - startTime}ms, status: ${response.status}`);
+        this.log.info("Message POST completed", {
+          sessionId,
+          status: response.status,
+          durationMs: Date.now() - startTime,
+        });
         if (!response.ok) {
-          console.error(`[opencode] sendMessage: POST failed with status ${response.status}`);
+          this.log.error("Message POST failed", new Error(`Status: ${response.status}`), {
+            sessionId,
+          });
         }
       })
       .catch((error) => {
-        console.error(`[opencode] sendMessage: POST error:`, error);
+        this.log.error("Message POST error", error, { sessionId });
       });
 
     return eventStream;
@@ -148,14 +156,15 @@ export class OpenCodeClientWrapper {
 
   /**
    * Create event stream from OpenCode SSE endpoint
-   * Uses simpler ReadableStream with pull-based reading for proper streaming
    */
   private async createEventStream(): Promise<ReadableStream<Uint8Array>> {
     const url = `${this.baseUrl}/event`;
-    console.log(`[opencode] createEventStream: fetching ${url}`);
     const fetchStart = Date.now();
     const response = await fetch(url);
-    console.log(`[opencode] createEventStream: fetch completed in ${Date.now() - fetchStart}ms, status: ${response.status}`);
+    this.log.debug("Event stream fetch completed", {
+      durationMs: Date.now() - fetchStart,
+      status: response.status,
+    });
 
     if (!response.ok || !response.body) {
       throw new Error(`Failed to connect to event stream: ${response.status}`);
@@ -167,8 +176,8 @@ export class OpenCodeClientWrapper {
     let receivedServerConnected = false;
     let firstChunkReceived = false;
     const streamStartTime = Date.now();
+    const log = this.log;
 
-    // Use ReadableStream with start() for simpler, non-blocking streaming
     return new ReadableStream({
       async start(controller) {
         const reader = sourceBody.getReader();
@@ -181,7 +190,9 @@ export class OpenCodeClientWrapper {
 
             if (!firstChunkReceived) {
               firstChunkReceived = true;
-              console.log(`[opencode] createEventStream: first chunk received after ${Date.now() - streamStartTime}ms`);
+              log.debug("First chunk received", {
+                durationMs: Date.now() - streamStartTime,
+              });
             }
 
             buffer += decoder.decode(value, { stream: true });
@@ -206,7 +217,7 @@ export class OpenCodeClientWrapper {
                   );
                 }
 
-                // Check for session.idle to close (use close() not terminate())
+                // Check for session.idle to close
                 if (receivedServerConnected) {
                   const isSessionIdle =
                     data.type === "session.idle" ||
@@ -249,14 +260,8 @@ export class OpenCodeClientWrapper {
   }
 }
 
-// Re-export as OpenCodeClient for backwards compatibility
-export { OpenCodeClientWrapper as OpenCodeClient };
-
 /**
  * Transform OpenCode events to our SSE event format
- *
- * Raw OpenCode events have structure:
- * { type: "message.part.updated", properties: { part: {...}, delta: "..." } }
  */
 function transformOpenCodeEvent(
   event: Record<string, unknown>
@@ -283,14 +288,12 @@ function transformOpenCodeEvent(
     if (partType === "text") {
       const time = part.time as Record<string, unknown> | undefined;
 
-      // Only emit for assistant streaming (has delta) or completed messages (has time.start)
-      // User message parts don't have delta or time.start
+      // Only emit for assistant streaming (has delta) or completed messages
       if (!delta && !time?.start) return null;
 
       const content = delta || (part.text as string) || "";
       const isComplete = !!time?.end;
 
-      // Only emit if there's actual content
       if (!content) return null;
 
       return {
@@ -307,8 +310,8 @@ function transformOpenCodeEvent(
     if (partType === "tool") {
       const state = part.state as Record<string, unknown> | undefined;
       const status = state?.status as string;
-      const toolName = part.tool as string || "unknown";
-      const toolId = part.callID as string || part.id as string || "";
+      const toolName = (part.tool as string) || "unknown";
+      const toolId = (part.callID as string) || (part.id as string) || "";
 
       if (status === "pending" || status === "running") {
         return {
@@ -337,7 +340,6 @@ function transformOpenCodeEvent(
       }
     }
 
-    // Skip other part types (step-start, step-finish, etc.)
     return null;
   }
 
@@ -354,7 +356,6 @@ function transformOpenCodeEvent(
           timestamp,
         };
       }
-      // Skip busy status updates
       return null;
     }
 
@@ -382,7 +383,7 @@ function transformOpenCodeEvent(
         timestamp,
       };
 
-    // Skip these verbose events
+    // Skip verbose events
     case "message.updated":
     case "session.updated":
     case "session.diff":

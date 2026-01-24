@@ -1,19 +1,26 @@
 /**
  * Sessions Router
- * Implements the 4 main API endpoints
+ * Implements the main API endpoints with proper validation and error handling
  */
 
 import { Hono } from "hono";
 import { v4 as uuidv4 } from "uuid";
 import type {
   Env,
-  CreateSessionRequest,
   CreateSessionResponse,
-  SendMessageRequest,
   ListFilesResponse,
   APIError,
   SessionState,
 } from "../types";
+import { logger } from "../utils/logger";
+import { DatabaseOperations } from "../utils/database";
+import {
+  validateCreateSessionRequest,
+  validateSendMessageRequest,
+  isValidUUID,
+  sanitizeString,
+} from "../utils/validation";
+import { ModalClient } from "../services/modal";
 
 const sessions = new Hono<{ Bindings: Env }>();
 
@@ -23,16 +30,35 @@ const sessions = new Hono<{ Bindings: Env }>();
  */
 sessions.post("/", async (c) => {
   const auth = c.get("auth");
-  let body: CreateSessionRequest;
+  const requestId = c.get("requestId");
+  const log = logger.child({ requestId, apiKeyId: auth.apiKeyId });
 
+  // Parse and validate request body
+  let rawBody: unknown;
   try {
-    body = await c.req.json<CreateSessionRequest>();
+    rawBody = await c.req.json();
   } catch {
-    body = {};
+    rawBody = {};
   }
+
+  const validation = validateCreateSessionRequest(rawBody);
+  if (!validation.success) {
+    log.warn("Validation failed", { errors: validation.errors });
+    const error: APIError = {
+      error: {
+        code: "VALIDATION_ERROR",
+        message: validation.errors?.join(", ") || "Invalid request",
+        details: { errors: validation.errors },
+      },
+    };
+    return c.json(error, 400);
+  }
+
+  const body = validation.data!;
 
   // Generate session ID
   const sessionId = uuidv4();
+  log.info("Creating session", { sessionId, repo: body.repo });
 
   // Get Durable Object stub
   const id = c.env.SESSION_AGENT.idFromName(sessionId);
@@ -41,16 +67,20 @@ sessions.post("/", async (c) => {
   // Initialize session
   const initRequest = new Request("http://internal/initialize", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Request-ID": requestId,
+    },
     body: JSON.stringify({
       sessionId,
       apiKeyId: auth.apiKeyId,
       userId: auth.userId,
-      repo: body.repo,
+      repo: sanitizeString(body.repo),
       gitToken: body.gitToken,
       anthropicApiKey: c.env.ANTHROPIC_API_KEY,
       modalApiUrl: c.env.MODAL_API_URL,
       modalApiSecret: c.env.MODAL_API_SECRET,
+      modalEnvironment: c.env.MODAL_ENVIRONMENT || "dev",
     }),
   });
 
@@ -58,13 +88,18 @@ sessions.post("/", async (c) => {
 
   if (!initResponse.ok) {
     const error = await initResponse.json<APIError>();
+    log.error("Session initialization failed", new Error(error.error.message));
     return c.json(error, initResponse.status as 400 | 500);
   }
 
   const state = await initResponse.json<SessionState>();
 
-  // Record in database (fire and forget)
-  recordSessionCreated(c, sessionId, auth.apiKeyId, body.repo).catch(console.error);
+  // Record in database using waitUntil for reliability
+  const db = new DatabaseOperations(c.env.DATABASE_URL);
+  c.executionCtx.waitUntil(
+    db.recordSessionCreated(sessionId, auth.apiKeyId, sanitizeString(body.repo))
+      .catch((err) => log.error("Failed to record session", err))
+  );
 
   const response: CreateSessionResponse = {
     id: sessionId,
@@ -72,6 +107,7 @@ sessions.post("/", async (c) => {
     createdAt: state.createdAt,
   };
 
+  log.info("Session created", { sessionId, status: state.status });
   return c.json(response, 201);
 });
 
@@ -81,10 +117,23 @@ sessions.post("/", async (c) => {
  */
 sessions.get("/:id", async (c) => {
   const auth = c.get("auth");
+  const requestId = c.get("requestId");
   const sessionId = c.req.param("id");
+  const log = logger.child({ requestId, sessionId, apiKeyId: auth.apiKeyId });
+
+  // Validate session ID format
+  if (!isValidUUID(sessionId)) {
+    const error: APIError = {
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid session ID format",
+      },
+    };
+    return c.json(error, 400);
+  }
 
   // Validate session ownership
-  const ownershipCheck = await verifySessionOwnership(c, sessionId, auth.apiKeyId);
+  const ownershipCheck = await verifySessionOwnership(c, sessionId, auth.apiKeyId, log);
   if (!ownershipCheck.ok) {
     return c.json(ownershipCheck.error, ownershipCheck.status as 403 | 404);
   }
@@ -96,6 +145,7 @@ sessions.get("/:id", async (c) => {
   // Get session state
   const stateRequest = new Request("http://internal/state", {
     method: "GET",
+    headers: { "X-Request-ID": requestId },
   });
 
   const stateResponse = await stub.fetch(stateRequest);
@@ -120,36 +170,56 @@ sessions.get("/:id", async (c) => {
  */
 sessions.post("/:id/messages", async (c) => {
   const auth = c.get("auth");
+  const requestId = c.get("requestId");
   const sessionId = c.req.param("id");
+  const log = logger.child({ requestId, sessionId, apiKeyId: auth.apiKeyId });
+
+  // Validate session ID format
+  if (!isValidUUID(sessionId)) {
+    const error: APIError = {
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid session ID format",
+      },
+    };
+    return c.json(error, 400);
+  }
 
   // Validate session ownership
-  const ownershipCheck = await verifySessionOwnership(c, sessionId, auth.apiKeyId);
+  const ownershipCheck = await verifySessionOwnership(c, sessionId, auth.apiKeyId, log);
   if (!ownershipCheck.ok) {
     return c.json(ownershipCheck.error, ownershipCheck.status as 403 | 404);
   }
 
-  let body: SendMessageRequest;
+  // Parse and validate request body
+  let rawBody: unknown;
   try {
-    body = await c.req.json<SendMessageRequest>();
+    rawBody = await c.req.json();
   } catch {
     const error: APIError = {
       error: {
-        code: "INTERNAL_ERROR",
-        message: "Invalid request body. Expected JSON with 'content' field.",
+        code: "VALIDATION_ERROR",
+        message: "Invalid JSON in request body",
       },
     };
     return c.json(error, 400);
   }
 
-  if (!body.content || typeof body.content !== "string") {
+  const validation = validateSendMessageRequest(rawBody);
+  if (!validation.success) {
+    log.warn("Message validation failed", { errors: validation.errors });
     const error: APIError = {
       error: {
-        code: "INTERNAL_ERROR",
-        message: "Message content is required",
+        code: "VALIDATION_ERROR",
+        message: validation.errors?.join(", ") || "Invalid request",
+        details: { errors: validation.errors },
       },
     };
     return c.json(error, 400);
   }
+
+  const body = validation.data!;
+  log.info("Sending message", { contentLength: body.content.length });
 
   // Get Durable Object stub
   const id = c.env.SESSION_AGENT.idFromName(sessionId);
@@ -158,12 +228,16 @@ sessions.post("/:id/messages", async (c) => {
   // Send prompt and get SSE stream
   const streamRequest = new Request("http://internal/prompt-stream", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Request-ID": requestId,
+    },
     body: JSON.stringify({
       content: body.content,
       anthropicApiKey: c.env.ANTHROPIC_API_KEY,
       modalApiUrl: c.env.MODAL_API_URL,
       modalApiSecret: c.env.MODAL_API_SECRET,
+      modalEnvironment: c.env.MODAL_ENVIRONMENT || "dev",
     }),
   });
 
@@ -171,11 +245,16 @@ sessions.post("/:id/messages", async (c) => {
 
   if (!streamResponse.ok) {
     const error = await streamResponse.json<APIError>();
+    log.error("Message stream failed", new Error(error.error.message));
     return c.json(error, streamResponse.status as 400 | 409 | 500);
   }
 
-  // Record usage (fire and forget)
-  recordMessageSent(c, sessionId, auth.apiKeyId).catch(console.error);
+  // Record usage using waitUntil
+  const db = new DatabaseOperations(c.env.DATABASE_URL);
+  c.executionCtx.waitUntil(
+    db.recordMessageSent(sessionId, auth.apiKeyId)
+      .catch((err) => log.error("Failed to record message", err))
+  );
 
   // Return SSE stream with headers to prevent buffering
   return new Response(streamResponse.body, {
@@ -184,7 +263,7 @@ sessions.post("/:id/messages", async (c) => {
       "Cache-Control": "no-cache, no-transform",
       "Connection": "keep-alive",
       "X-Accel-Buffering": "no",
-      "Transfer-Encoding": "chunked",
+      "X-Request-ID": requestId,
     },
   });
 });
@@ -195,11 +274,24 @@ sessions.post("/:id/messages", async (c) => {
  */
 sessions.get("/:id/files/*", async (c) => {
   const auth = c.get("auth");
+  const requestId = c.get("requestId");
   const sessionId = c.req.param("id");
   const filePath = c.req.path.replace(`/v1/sessions/${sessionId}/files`, "") || "/";
+  const log = logger.child({ requestId, sessionId, path: filePath });
+
+  // Validate session ID format
+  if (!isValidUUID(sessionId)) {
+    const error: APIError = {
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid session ID format",
+      },
+    };
+    return c.json(error, 400);
+  }
 
   // Validate session ownership
-  const ownershipCheck = await verifySessionOwnership(c, sessionId, auth.apiKeyId);
+  const ownershipCheck = await verifySessionOwnership(c, sessionId, auth.apiKeyId, log);
   if (!ownershipCheck.ok) {
     return c.json(ownershipCheck.error, ownershipCheck.status as 403 | 404);
   }
@@ -218,6 +310,8 @@ sessions.get("/:id/files/*", async (c) => {
       headers: {
         "X-Modal-Url": c.env.MODAL_API_URL,
         "X-Modal-Secret": c.env.MODAL_API_SECRET,
+        "X-Modal-Environment": c.env.MODAL_ENVIRONMENT || "dev",
+        "X-Request-ID": requestId,
       },
     }
   );
@@ -238,36 +332,9 @@ sessions.get("/:id/files/*", async (c) => {
   return new Response(filesResponse.body, {
     headers: {
       "Content-Type": filesResponse.headers.get("Content-Type") || "application/octet-stream",
+      "X-Request-ID": requestId,
     },
   });
-});
-
-/**
- * POST /v1/sessions/:id/debug
- * Debug endpoint to test fetch to OpenCode
- */
-sessions.post("/:id/debug", async (c) => {
-  const auth = c.get("auth");
-  const sessionId = c.req.param("id");
-
-  const ownershipCheck = await verifySessionOwnership(c, sessionId, auth.apiKeyId);
-  if (!ownershipCheck.ok) {
-    return c.json(ownershipCheck.error, ownershipCheck.status as 403 | 404);
-  }
-
-  const id = c.env.SESSION_AGENT.idFromName(sessionId);
-  const stub = c.env.SESSION_AGENT.get(id);
-
-  const body = await c.req.text();
-  const debugRequest = new Request("http://internal/debug-fetch", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: body || "{}",
-  });
-
-  const debugResponse = await stub.fetch(debugRequest);
-  const data = await debugResponse.json();
-  return c.json(data);
 });
 
 /**
@@ -276,10 +343,23 @@ sessions.post("/:id/debug", async (c) => {
  */
 sessions.get("/:id/logs", async (c) => {
   const auth = c.get("auth");
+  const requestId = c.get("requestId");
   const sessionId = c.req.param("id");
+  const log = logger.child({ requestId, sessionId });
+
+  // Validate session ID format
+  if (!isValidUUID(sessionId)) {
+    const error: APIError = {
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid session ID format",
+      },
+    };
+    return c.json(error, 400);
+  }
 
   // Validate session ownership
-  const ownershipCheck = await verifySessionOwnership(c, sessionId, auth.apiKeyId);
+  const ownershipCheck = await verifySessionOwnership(c, sessionId, auth.apiKeyId, log);
   if (!ownershipCheck.ok) {
     return c.json(ownershipCheck.error, ownershipCheck.status as 403 | 404);
   }
@@ -288,57 +368,61 @@ sessions.get("/:id/logs", async (c) => {
   const id = c.env.SESSION_AGENT.idFromName(sessionId);
   const stub = c.env.SESSION_AGENT.get(id);
 
-  const stateRequest = new Request("http://internal/state", {
-    method: "GET",
-  });
-  const stateResponse = await stub.fetch(stateRequest);
-
-  if (!stateResponse.ok) {
-    const error = await stateResponse.json<APIError>();
-    return c.json(error, stateResponse.status as 500);
-  }
-
   // Get sandbox ID from internal state
   const getSandboxRequest = new Request("http://internal/get-sandbox-id", {
     method: "GET",
+    headers: { "X-Request-ID": requestId },
   });
   const sandboxResponse = await stub.fetch(getSandboxRequest);
 
   if (!sandboxResponse.ok) {
-    return c.json({
-      error: {
-        code: "SANDBOX_NOT_FOUND",
-        message: "Sandbox not available",
+    return c.json(
+      {
+        error: {
+          code: "SESSION_NOT_FOUND",
+          message: "Sandbox not available",
+        },
       },
-    }, 404);
+      404
+    );
   }
 
   const { sandboxId } = await sandboxResponse.json<{ sandboxId: string }>();
 
   if (!sandboxId) {
-    return c.json({
-      error: {
-        code: "SANDBOX_NOT_FOUND",
-        message: "Sandbox not running",
+    return c.json(
+      {
+        error: {
+          code: "SESSION_NOT_FOUND",
+          message: "Sandbox not running",
+        },
       },
-    }, 404);
+      404
+    );
   }
 
   // Fetch logs from Modal
-  const { ModalClient } = await import("../services/modal");
-  const modal = new ModalClient(c.env.MODAL_API_URL, c.env.MODAL_API_SECRET);
+  const modal = new ModalClient({
+    baseUrl: c.env.MODAL_API_URL,
+    apiSecret: c.env.MODAL_API_SECRET,
+    environment: (c.env.MODAL_ENVIRONMENT as "dev" | "prod") || "dev",
+  });
 
   try {
     const tail = parseInt(c.req.query("tail") || "100", 10);
     const result = await modal.getLogs(sandboxId, tail);
     return c.json(result);
   } catch (error) {
-    return c.json({
-      error: {
-        code: "LOGS_FETCH_FAILED",
-        message: error instanceof Error ? error.message : "Failed to fetch logs",
+    log.error("Failed to fetch logs", error);
+    return c.json(
+      {
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Failed to fetch logs",
+        },
       },
-    }, 500);
+      500
+    );
   }
 });
 
@@ -348,13 +432,28 @@ sessions.get("/:id/logs", async (c) => {
  */
 sessions.delete("/:id", async (c) => {
   const auth = c.get("auth");
+  const requestId = c.get("requestId");
   const sessionId = c.req.param("id");
+  const log = logger.child({ requestId, sessionId, apiKeyId: auth.apiKeyId });
+
+  // Validate session ID format
+  if (!isValidUUID(sessionId)) {
+    const error: APIError = {
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid session ID format",
+      },
+    };
+    return c.json(error, 400);
+  }
 
   // Validate session ownership
-  const ownershipCheck = await verifySessionOwnership(c, sessionId, auth.apiKeyId);
+  const ownershipCheck = await verifySessionOwnership(c, sessionId, auth.apiKeyId, log);
   if (!ownershipCheck.ok) {
     return c.json(ownershipCheck.error, ownershipCheck.status as 403 | 404);
   }
+
+  log.info("Terminating session");
 
   // Get Durable Object stub
   const id = c.env.SESSION_AGENT.idFromName(sessionId);
@@ -366,6 +465,8 @@ sessions.delete("/:id", async (c) => {
     headers: {
       "X-Modal-Url": c.env.MODAL_API_URL,
       "X-Modal-Secret": c.env.MODAL_API_SECRET,
+      "X-Modal-Environment": c.env.MODAL_ENVIRONMENT || "dev",
+      "X-Request-ID": requestId,
     },
   });
 
@@ -373,12 +474,18 @@ sessions.delete("/:id", async (c) => {
 
   if (!terminateResponse.ok) {
     const error = await terminateResponse.json<APIError>();
+    log.error("Session termination failed", new Error(error.error.message));
     return c.json(error, terminateResponse.status as 500);
   }
 
-  // Record termination (fire and forget)
-  recordSessionTerminated(c, sessionId, auth.apiKeyId).catch(console.error);
+  // Record termination using waitUntil
+  const db = new DatabaseOperations(c.env.DATABASE_URL);
+  c.executionCtx.waitUntil(
+    db.recordSessionTerminated(sessionId)
+      .catch((err) => log.error("Failed to record termination", err))
+  );
 
+  log.info("Session terminated");
   return c.json({ status: "terminated" });
 });
 
@@ -388,11 +495,9 @@ sessions.delete("/:id", async (c) => {
 async function verifySessionOwnership(
   c: { env: Env },
   sessionId: string,
-  apiKeyId: string
-): Promise<
-  | { ok: true }
-  | { ok: false; error: APIError; status: number }
-> {
+  apiKeyId: string,
+  log: ReturnType<typeof logger.child>
+): Promise<{ ok: true } | { ok: false; error: APIError; status: number }> {
   // Get Durable Object stub
   const id = c.env.SESSION_AGENT.idFromName(sessionId);
   const stub = c.env.SESSION_AGENT.get(id);
@@ -408,6 +513,7 @@ async function verifySessionOwnership(
   const result = await checkResponse.json<{ owned: boolean; exists: boolean }>();
 
   if (!result.exists) {
+    log.warn("Session not found");
     return {
       ok: false,
       error: {
@@ -422,6 +528,7 @@ async function verifySessionOwnership(
   }
 
   if (!result.owned) {
+    log.warn("Session not owned by this API key");
     return {
       ok: false,
       error: {
@@ -436,92 +543,6 @@ async function verifySessionOwnership(
   }
 
   return { ok: true };
-}
-
-/**
- * Record session created in database
- */
-async function recordSessionCreated(
-  c: { env: Env },
-  sessionId: string,
-  apiKeyId: string,
-  repo?: string
-): Promise<void> {
-  const databaseUrl = c.env.DATABASE_URL;
-  if (!databaseUrl) return;
-
-  try {
-    await fetch(databaseUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: `
-          INSERT INTO sessions (id, api_key_id, repo, status)
-          VALUES ($1, $2, $3, 'starting')
-        `,
-        params: [sessionId, apiKeyId, repo || null],
-      }),
-    });
-  } catch (error) {
-    console.error("Failed to record session:", error);
-  }
-}
-
-/**
- * Record message sent in database
- */
-async function recordMessageSent(
-  c: { env: Env },
-  sessionId: string,
-  apiKeyId: string
-): Promise<void> {
-  const databaseUrl = c.env.DATABASE_URL;
-  if (!databaseUrl) return;
-
-  try {
-    await fetch(databaseUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: `
-          INSERT INTO usage_records (api_key_id, session_id, event_type)
-          VALUES ($1, $2, 'message.sent')
-        `,
-        params: [apiKeyId, sessionId],
-      }),
-    });
-  } catch (error) {
-    console.error("Failed to record message:", error);
-  }
-}
-
-/**
- * Record session terminated in database
- */
-async function recordSessionTerminated(
-  c: { env: Env },
-  sessionId: string,
-  _apiKeyId: string
-): Promise<void> {
-  const databaseUrl = c.env.DATABASE_URL;
-  if (!databaseUrl) return;
-
-  try {
-    await fetch(databaseUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: `
-          UPDATE sessions
-          SET status = 'terminated', terminated_at = NOW()
-          WHERE id = $1
-        `,
-        params: [sessionId],
-      }),
-    });
-  } catch (error) {
-    console.error("Failed to record termination:", error);
-  }
 }
 
 export { sessions };
