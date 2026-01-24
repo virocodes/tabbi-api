@@ -168,14 +168,24 @@ export interface Env {
   // Durable Object bindings
   SESSION_AGENT: DurableObjectNamespace;
 
-  // Environment variables
+  // Modal sandbox
   MODAL_API_URL: string;
-  MODAL_API_SECRET: string;
-  MODAL_ENVIRONMENT?: "dev" | "prod"; // Added: configurable Modal environment
-  DATABASE_URL: string;
-  UPSTASH_REDIS_URL: string;
-  UPSTASH_REDIS_TOKEN: string;
+  MODAL_API_SECRET?: string;
+  MODAL_ENVIRONMENT?: "dev" | "prod";
+
+  // AI
   ANTHROPIC_API_KEY: string;
+
+  // Database - Option 1: Supabase (recommended)
+  SUPABASE_URL?: string;
+  SUPABASE_SERVICE_KEY?: string;
+
+  // Database - Option 2: Direct Postgres
+  DATABASE_URL?: string;
+
+  // Rate limiting (still needed - Supabase doesn't have Redis)
+  UPSTASH_REDIS_URL?: string;
+  UPSTASH_REDIS_TOKEN?: string;
 }
 
 // Extend Hono context
