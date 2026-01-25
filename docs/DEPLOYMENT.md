@@ -13,84 +13,76 @@ This guide gets your Agent API MVP to production as fast as possible using the s
                     ┌──────────────┼──────────────┐
                     ▼              ▼              ▼
               ┌──────────┐  ┌───────────┐  ┌───────────┐
-              │  Neon    │  │  Upstash  │  │ Anthropic │
+              │ Supabase │  │  Upstash  │  │ Anthropic │
               │ Postgres │  │   Redis   │  │    API    │
-              └──────────┘  └───────────┘  └───────────┘
+              │  + Auth  │  └───────────┘  └───────────┘
+              └──────────┘
+                    │
+              ┌──────────┐
+              │ Dashboard│
+              │ (Next.js)│
+              └──────────┘
 ```
 
 ## Services You'll Need
 
 | Service | Purpose | Free Tier | Time to Setup |
 |---------|---------|-----------|---------------|
+| [Supabase](https://supabase.com) | PostgreSQL + Auth + RLS | 500 MB, 50k MAU | 10 min |
 | [Cloudflare Workers](https://workers.cloudflare.com) | API hosting + Durable Objects | 100k req/day | 5 min |
-| [Neon](https://neon.tech) | PostgreSQL database | 0.5 GB storage | 5 min |
 | [Upstash](https://upstash.com) | Redis rate limiting | 10k commands/day | 3 min |
 | [Modal](https://modal.com) | Sandbox compute | $30/month credits | 10 min |
 | [Anthropic](https://console.anthropic.com) | Claude API | Pay-as-you-go | 2 min |
+| [Vercel](https://vercel.com) | Dashboard hosting | Unlimited sites | 5 min |
 
-**Total setup time: ~30 minutes**
+**Total setup time: ~35 minutes**
 
 ---
 
-## Step 1: Neon PostgreSQL (5 min)
+## Step 1: Supabase (10 min)
 
-### 1.1 Create Account & Database
+Supabase provides PostgreSQL database, authentication, and Row Level Security in one platform.
 
-1. Go to [neon.tech](https://neon.tech) and sign up
+### 1.1 Create Account & Project
+
+1. Go to [supabase.com](https://supabase.com) and sign up
 2. Create a new project (e.g., "agent-api")
-3. Copy your connection string from the dashboard
+3. Choose a region close to your users
+4. Set a strong database password (save it securely)
 
 ### 1.2 Run Schema Migration
 
-```bash
-# Install psql if needed (macOS)
-brew install postgresql
+1. In your Supabase dashboard, go to **SQL Editor**
+2. Paste the contents of `database/supabase-schema.sql`
+3. Click **Run** to execute
 
-# Connect and run schema
-psql "your-neon-connection-string" -f database/schema.sql
-```
+This creates:
+- `api_keys` table with RLS policies
+- `sessions` table for tracking
+- `usage_records` table for analytics
+- Helper functions for key management
 
-Or use the Neon SQL Editor in the dashboard - paste contents of `database/schema.sql`.
+### 1.3 Get Your Credentials
 
-### 1.3 Create Your First API Key
+From the Supabase dashboard, go to **Settings > API**:
 
-```sql
--- Generate a test API key (run in Neon SQL Editor)
--- The actual key: aa_live_abc123def456ghi789jkl012mno345pq
+| Credential | Where to Find | Used By |
+|------------|---------------|---------|
+| Project URL | Settings > API | Dashboard, API |
+| Anon Key | Settings > API > anon public | Dashboard (client-side) |
+| Service Role Key | Settings > API > service_role | API (server-side only) |
 
-INSERT INTO api_keys (key_hash, key_prefix, user_id, environment, name)
-VALUES (
-  -- SHA-256 hash of: aa_live_abc123def456ghi789jkl012mno345pq
-  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-  'aa_live_',
-  '00000000-0000-0000-0000-000000000001',  -- Your user ID
-  'live',
-  'Development Key'
-);
-```
+> **Important:** The service role key bypasses RLS. Keep it secret and only use it in your Cloudflare Worker.
 
-**To generate a real key hash:**
-```javascript
-// Run in Node.js or browser console
-const key = 'aa_live_' + crypto.randomUUID().replace(/-/g, '');
-const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
-const hashHex = [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('');
-console.log('Key:', key);
-console.log('Hash:', hashHex);
-```
+### 1.4 Enable Auth Providers (Optional)
 
-### 1.4 Get Your Database URL
+For the dashboard, you can enable additional auth providers:
 
-For Cloudflare Workers, you need the **HTTP** endpoint (not the postgres:// URL).
+1. Go to **Authentication > Providers**
+2. Enable GitHub, Google, or other providers
+3. Configure OAuth credentials as needed
 
-Neon provides a serverless driver. Your DATABASE_URL will be used with fetch:
-
-```
-# Format for wrangler.toml secrets
-DATABASE_URL=https://your-project.neon.tech/sql
-```
-
-> **Note:** The current codebase expects a simple HTTP POST endpoint. You may need to use Neon's [Serverless Driver](https://neon.tech/docs/serverless/serverless-driver) or adapt the database utility. For fastest MVP, use the Neon HTTP API directly.
+Email/password auth is enabled by default.
 
 ---
 
@@ -199,8 +191,11 @@ MODAL_ENVIRONMENT = "dev"  # or "prod"
 cd api
 
 # Set each secret
-wrangler secret put DATABASE_URL
-# Paste: your Neon connection URL
+wrangler secret put SUPABASE_URL
+# Paste: https://xxx.supabase.co
+
+wrangler secret put SUPABASE_SERVICE_KEY
+# Paste: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (service_role key)
 
 wrangler secret put UPSTASH_REDIS_URL
 # Paste: https://xxx.upstash.io
@@ -235,7 +230,59 @@ You'll get a URL like: `https://agent-api.your-subdomain.workers.dev`
 
 ---
 
-## Step 6: Verify Deployment
+## Step 6: Deploy Dashboard (5 min)
+
+The Next.js dashboard provides a UI for users to manage API keys and view usage.
+
+### 6.1 Configure Environment
+
+```bash
+cd dashboard
+
+# Copy example env file
+cp .env.local.example .env.local
+```
+
+Edit `.env.local`:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+> **Note:** Use the **anon** key here, not the service role key. The anon key is safe for client-side use.
+
+### 6.2 Deploy to Vercel
+
+```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Deploy
+cd dashboard
+vercel
+
+# Follow prompts to link to your Vercel account
+# Set environment variables when prompted
+```
+
+Or deploy via GitHub:
+1. Push your repo to GitHub
+2. Go to [vercel.com](https://vercel.com) and import the project
+3. Set root directory to `dashboard`
+4. Add environment variables in Vercel dashboard
+5. Deploy
+
+### 6.3 Configure Auth Redirect
+
+In Supabase dashboard:
+1. Go to **Authentication > URL Configuration**
+2. Add your Vercel URL to **Redirect URLs**:
+   - `https://your-app.vercel.app/auth`
+   - `https://your-app.vercel.app/dashboard`
+
+---
+
+## Step 7: Verify Deployment
 
 ### Health Check
 
@@ -271,13 +318,23 @@ await session.sendMessage("Hello!", {
 await session.delete();
 ```
 
+### Test Dashboard
+
+1. Go to your dashboard URL (e.g., `https://your-app.vercel.app`)
+2. Sign up with email/password or OAuth
+3. Create an API key from the dashboard
+4. Copy the key and test with the SDK above
+
 ---
 
 ## Environment Variables Summary
 
+### Cloudflare Workers (API)
+
 | Variable | Where to Get | Example |
 |----------|--------------|---------|
-| `DATABASE_URL` | Neon dashboard | `https://xxx.neon.tech/sql` |
+| `SUPABASE_URL` | Supabase Settings > API | `https://xxx.supabase.co` |
+| `SUPABASE_SERVICE_KEY` | Supabase Settings > API | `eyJhbG...` (service_role) |
 | `UPSTASH_REDIS_URL` | Upstash dashboard | `https://xxx.upstash.io` |
 | `UPSTASH_REDIS_TOKEN` | Upstash dashboard | `AXxxxxxxxxxxxx` |
 | `MODAL_API_URL` | Modal deploy output | `https://workspace--agent-sandbox` |
@@ -285,17 +342,25 @@ await session.delete();
 | `MODAL_ENVIRONMENT` | `dev` or `prod` | `dev` |
 | `ANTHROPIC_API_KEY` | Anthropic console | `sk-ant-xxxxx` |
 
+### Dashboard (Vercel)
+
+| Variable | Where to Get | Example |
+|----------|--------------|---------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase Settings > API | `https://xxx.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Settings > API | `eyJhbG...` (anon) |
+
 ---
 
 ## Cost Estimates (MVP Scale)
 
 | Service | Free Tier | After Free Tier |
 |---------|-----------|-----------------|
+| Supabase | 500 MB, 50k MAU | $25/month for 8 GB |
 | Cloudflare Workers | 100k req/day | $5/month for 10M req |
-| Neon | 0.5 GB, 1 project | $19/month for 10 GB |
 | Upstash | 10k commands/day | $0.20/100k commands |
 | Modal | $30/month credits | ~$0.0001/sec compute |
 | Anthropic | Pay-as-you-go | ~$3-15/1M tokens |
+| Vercel | Unlimited hobby | $20/month for Pro |
 
 **Realistic MVP cost: $0-50/month** depending on usage.
 
@@ -320,26 +385,50 @@ await session.delete();
 - Check Modal logs: `modal app logs agent-sandbox`
 - Verify OpenCode server starts correctly in sandbox
 
+### Dashboard auth not working
+- Verify `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set
+- Check Supabase redirect URLs include your dashboard URL
+- Ensure auth providers are enabled in Supabase dashboard
+
+### "Failed to create API key" in dashboard
+- Check browser console for errors
+- Verify the `create_api_key` RPC function exists in Supabase
+- Confirm RLS policies allow the authenticated user to insert
+
 ---
 
 ## Next Steps After MVP
 
 1. **Monitoring**: Add [Sentry](https://sentry.io) for error tracking
 2. **Analytics**: Track usage with [Posthog](https://posthog.com) or built-in usage_records table
-3. **Auth**: Add user management with [Clerk](https://clerk.com) or [Auth0](https://auth0.com)
-4. **Billing**: Integrate [Stripe](https://stripe.com) for paid plans
-5. **CDN**: Put static assets behind Cloudflare's CDN
-6. **Staging**: Create a separate Worker for staging environment
+3. **Billing**: Integrate [Stripe](https://stripe.com) for paid plans
+4. **CDN**: Put static assets behind Cloudflare's CDN
+5. **Staging**: Create a separate Worker for staging environment
+6. **Custom Domain**: Add custom domains to both API and dashboard
 
 ---
 
 ## Production Checklist
 
+### API (Cloudflare Workers)
 - [ ] All secrets set in Cloudflare Workers
-- [ ] Database schema migrated to Neon
-- [ ] At least one API key created in database
 - [ ] Modal sandbox deployed (dev or prod)
 - [ ] Custom domain configured (optional but recommended)
 - [ ] Rate limits appropriate for your use case
+
+### Database (Supabase)
+- [ ] Database schema migrated (`supabase-schema.sql`)
+- [ ] RLS policies enabled and tested
+- [ ] Auth redirect URLs configured
+- [ ] Backup strategy confirmed (Supabase has automatic backups)
+
+### Dashboard (Vercel)
+- [ ] Environment variables set
+- [ ] Custom domain configured (optional)
+- [ ] Auth flow tested (sign up, sign in, sign out)
+- [ ] API key creation/revocation tested
+
+### General
 - [ ] Error monitoring in place
-- [ ] Backup strategy for database (Neon has automatic backups)
+- [ ] SSL/TLS on all endpoints
+- [ ] Test full flow: auth → create key → use SDK
