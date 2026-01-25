@@ -1,6 +1,6 @@
 # Production Deployment Guide
 
-This guide gets your Agent API MVP to production as fast as possible using the services already integrated in the codebase.
+This guide gets your Tabbi MVP to production as fast as possible using the services already integrated in the codebase.
 
 ## Architecture Overview
 
@@ -46,7 +46,7 @@ Supabase provides PostgreSQL database, authentication, and Row Level Security in
 ### 1.1 Create Account & Project
 
 1. Go to [supabase.com](https://supabase.com) and sign up
-2. Create a new project (e.g., "agent-api")
+2. Create a new project (e.g., "tabbi")
 3. Choose a region close to your users
 4. Set a strong database password (save it securely)
 
@@ -166,7 +166,7 @@ Then set `MODAL_ENVIRONMENT=prod` in your Cloudflare Workers.
 ### 5.2 Update wrangler.toml
 
 ```toml
-name = "agent-api"
+name = "tabbi-api"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
@@ -220,7 +220,7 @@ wrangler secret put ANTHROPIC_API_KEY
 wrangler deploy
 ```
 
-You'll get a URL like: `https://agent-api.your-subdomain.workers.dev`
+You'll get a URL like: `https://tabbi-api.your-subdomain.workers.dev`
 
 ### 5.5 Custom Domain (Optional)
 
@@ -287,15 +287,15 @@ In Supabase dashboard:
 ### Health Check
 
 ```bash
-curl https://agent-api.your-subdomain.workers.dev/health
+curl https://tabbi-api.your-subdomain.workers.dev/health
 # {"status":"ok"}
 ```
 
 ### Create a Session
 
 ```bash
-curl -X POST https://agent-api.your-subdomain.workers.dev/v1/sessions \
-  -H "Authorization: Bearer aa_live_abc123def456ghi789jkl012mno345pq" \
+curl -X POST https://tabbi-api.your-subdomain.workers.dev/v1/sessions \
+  -H "Authorization: Bearer tb_live_abc123def456ghi789jkl012mno345pq" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -303,14 +303,14 @@ curl -X POST https://agent-api.your-subdomain.workers.dev/v1/sessions \
 ### Test with SDK
 
 ```typescript
-import { AgentAPI } from "@agent-api/sdk";
+import { Tabbi } from "@tabbi/sdk";
 
-const agent = new AgentAPI({
-  apiKey: "aa_live_abc123def456ghi789jkl012mno345pq",
-  baseUrl: "https://agent-api.your-subdomain.workers.dev"
+const tabbi = new Tabbi({
+  apiKey: "tb_live_abc123def456ghi789jkl012mno345pq",
+  baseUrl: "https://tabbi-api.your-subdomain.workers.dev"
 });
 
-const session = await agent.createSession();
+const session = await tabbi.createSession();
 await session.waitForReady();
 await session.sendMessage("Hello!", {
   onEvent: (e) => console.log(e)

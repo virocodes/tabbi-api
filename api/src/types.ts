@@ -1,5 +1,5 @@
 /**
- * Agent API Type Definitions
+ * Tabbi API Type Definitions
  * Single source of truth for all API types
  */
 

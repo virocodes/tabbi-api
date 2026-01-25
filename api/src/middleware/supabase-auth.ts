@@ -7,8 +7,8 @@ import { MiddlewareHandler } from "hono";
 import type { Env, AuthContext, APIError } from "../types";
 import { logger } from "../utils/logger";
 
-// API key format: aa_<env>_<32 alphanumeric chars>
-const API_KEY_REGEX = /^aa_(live|test)_[a-zA-Z0-9]{32}$/;
+// API key format: tb_<env>_<32 alphanumeric chars>
+const API_KEY_REGEX = /^tb_(live|test)_[a-zA-Z0-9]{32}$/;
 
 function generateRequestId(): string {
   return `req_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
@@ -129,7 +129,7 @@ export const supabaseAuthMiddleware: MiddlewareHandler<{ Bindings: Env }> = asyn
   const auth: AuthContext = {
     apiKeyId: keyData.id,
     userId: keyData.userId,
-    environment: apiKey.startsWith("aa_live_") ? "live" : "test",
+    environment: apiKey.startsWith("tb_live_") ? "live" : "test",
     requestId,
   };
 

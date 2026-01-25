@@ -1,7 +1,7 @@
 {
-  "name": "@agent-api/sdk",
+  "name": "@tabbi/sdk",
   "version": "0.1.0",
-  "description": "TypeScript SDK for Agent API",
+  "description": "TypeScript SDK for Tabbi",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -36,6 +36,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/agent-api"
+    "url": "https://github.com/tabbi-ai/tabbi"
   }
 }

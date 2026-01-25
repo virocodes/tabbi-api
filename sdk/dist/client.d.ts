@@ -1,44 +1,44 @@
 /**
- * Agent API SDK Client
+ * Tabbi SDK Client
  * @packageDocumentation
  */
-import type { AgentAPIConfig, SessionInfo, CreateSessionOptions, SendMessageOptions, Message, FileInfo } from "./types";
+import type { TabbiConfig, SessionInfo, CreateSessionOptions, SendMessageOptions, Message, FileInfo } from "./types";
 /**
- * Main client for interacting with the Agent API.
+ * Main client for interacting with the Tabbi API.
  *
  * @example
  * ```typescript
- * import { AgentAPI } from "@agent-api/sdk";
+ * import { Tabbi } from "@tabbi/sdk";
  *
- * const agent = new AgentAPI({
- *   apiKey: "aa_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ * const tabbi = new Tabbi({
+ *   apiKey: "tb_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
  * });
  *
- * const session = await agent.createSession();
+ * const session = await tabbi.createSession();
  * await session.sendMessage("Create a hello world app");
  * await session.delete();
  * ```
  */
-export declare class AgentAPI {
+export declare class Tabbi {
     private apiKey;
     private baseUrl;
     private timeout;
     /**
-     * Create a new AgentAPI client.
+     * Create a new Tabbi client.
      *
      * @param config - Configuration options
      * @throws Error if API key is missing or invalid format
      *
      * @example
      * ```typescript
-     * const agent = new AgentAPI({
-     *   apiKey: "aa_live_xxx",
-     *   baseUrl: "https://api.agent-api.com", // optional
+     * const tabbi = new Tabbi({
+     *   apiKey: "tb_live_xxx",
+     *   baseUrl: "https://api.tabbi.sh", // optional
      *   timeout: 30000 // optional, in milliseconds
      * });
      * ```
      */
-    constructor(config: AgentAPIConfig);
+    constructor(config: TabbiConfig);
     /**
      * Create a new session with an isolated sandbox environment.
      *
@@ -91,12 +91,12 @@ export declare class AgentAPI {
 /**
  * Represents an active session with an isolated sandbox environment.
  *
- * Sessions are created via {@link AgentAPI.createSession} and provide methods
+ * Sessions are created via {@link Tabbi.createSession} and provide methods
  * for sending messages, accessing files, and managing the session lifecycle.
  *
  * @example
  * ```typescript
- * const session = await agent.createSession();
+ * const session = await tabbi.createSession();
  *
  * // Wait for the sandbox to be ready
  * await session.waitForReady();
@@ -123,7 +123,7 @@ export declare class Session {
     /**
      * @internal
      */
-    constructor(client: AgentAPI, info: SessionInfo);
+    constructor(client: Tabbi, info: SessionInfo);
     /**
      * Current session status.
      *
@@ -147,7 +147,7 @@ export declare class Session {
      * @param content - The message to send
      * @param options - Options including event callback and abort signal
      * @returns The final assistant message
-     * @throws {@link AgentAPIError} with code `SESSION_BUSY` if already processing
+     * @throws {@link TabbiError} with code `SESSION_BUSY` if already processing
      *
      * @example
      * ```typescript
@@ -238,8 +238,8 @@ export declare class Session {
      * before sending messages. Uses exponential backoff for polling.
      *
      * @param timeoutMs - Maximum time to wait in milliseconds
-     * @throws {@link AgentAPIError} with code `TIMEOUT` if timeout exceeded
-     * @throws {@link AgentAPIError} with code `SESSION_ERROR` if session has an error
+     * @throws {@link TabbiError} with code `TIMEOUT` if timeout exceeded
+     * @throws {@link TabbiError} with code `SESSION_ERROR` if session has an error
      *
      * @example
      * ```typescript

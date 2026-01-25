@@ -12,15 +12,15 @@ export function QuickStart() {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const installCode = `npm install @agent-api/sdk`;
+  const installCode = `npm install @tabbi/sdk`;
 
-  const usageCode = `import { AgentAPI } from "@agent-api/sdk";
+  const usageCode = `import { Tabbi } from "@tabbi/sdk";
 
-const agent = new AgentAPI({
-  apiKey: "aa_live_your_key_here"
+const tabbi = new Tabbi({
+  apiKey: "tb_live_your_key_here"
 });
 
-const session = await agent.createSession();
+const session = await tabbi.createSession();
 await session.waitForReady();
 
 await session.sendMessage("Build a REST API", {
@@ -52,7 +52,7 @@ await session.delete();`;
         <div className="bg-bg-tertiary border border-border rounded-md p-3 font-mono text-sm">
           <span className="text-text-muted">$</span>{" "}
           <span className="text-accent">npm</span>{" "}
-          <span className="text-text-primary">install @agent-api/sdk</span>
+          <span className="text-text-primary">install @tabbi/sdk</span>
         </div>
       </div>
 
@@ -71,20 +71,20 @@ await session.delete();`;
           <pre className="text-text-secondary">
             <code>
               <span className="text-purple-400">import</span>{" "}
-              <span className="text-text-primary">{"{ AgentAPI }"}</span>{" "}
+              <span className="text-text-primary">{"{ Tabbi }"}</span>{" "}
               <span className="text-purple-400">from</span>{" "}
-              <span className="text-accent">&quot;@agent-api/sdk&quot;</span>;
+              <span className="text-accent">&quot;@tabbi/sdk&quot;</span>;
               {"\n\n"}
               <span className="text-purple-400">const</span>{" "}
               <span className="text-text-primary">agent</span>{" "}
               <span className="text-text-muted">=</span>{" "}
               <span className="text-purple-400">new</span>{" "}
-              <span className="text-yellow-400">AgentAPI</span>
+              <span className="text-yellow-400">Tabbi</span>
               <span className="text-text-muted">({"{"}</span>
               {"\n  "}
               <span className="text-text-primary">apiKey</span>
               <span className="text-text-muted">:</span>{" "}
-              <span className="text-accent">&quot;aa_live_...&quot;</span>
+              <span className="text-accent">&quot;tb_live_...&quot;</span>
               {"\n"}
               <span className="text-text-muted">{"})"}</span>;
               {"\n\n"}

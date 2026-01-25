@@ -8,8 +8,8 @@ import type { Env, AuthContext, APIError } from "../types";
 import { logger } from "../utils/logger";
 import { withRetry } from "../utils/retry";
 
-// API key format: aa_<env>_<32 alphanumeric chars>
-const API_KEY_REGEX = /^aa_(live|test)_[a-zA-Z0-9]{32}$/;
+// API key format: tb_<env>_<32 alphanumeric chars>
+const API_KEY_REGEX = /^tb_(live|test)_[a-zA-Z0-9]{32}$/;
 
 /**
  * Generate a unique request ID
@@ -52,7 +52,7 @@ function isValidKeyFormat(key: string): boolean {
  * Get environment from API key prefix
  */
 function getEnvironmentFromKey(key: string): "live" | "test" {
-  return key.startsWith("aa_live_") ? "live" : "test";
+  return key.startsWith("tb_live_") ? "live" : "test";
 }
 
 /**
@@ -76,7 +76,7 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
     const error: APIError = {
       error: {
         code: "INVALID_API_KEY",
-        message: "Missing or malformed Authorization header. Expected: Bearer aa_<env>_<key>",
+        message: "Missing or malformed Authorization header. Expected: Bearer tb_<env>_<key>",
       },
     };
     return c.json(error, 401);
@@ -87,7 +87,7 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
     const error: APIError = {
       error: {
         code: "INVALID_API_KEY",
-        message: "Invalid API key format. Expected: aa_live_xxx or aa_test_xxx",
+        message: "Invalid API key format. Expected: tb_live_xxx or tb_test_xxx",
       },
     };
     return c.json(error, 401);

@@ -2,15 +2,15 @@
   "$schema": "https://typedoc.org/schema.json",
   "entryPoints": ["src/index.ts"],
   "out": "docs",
-  "name": "Agent API SDK",
+  "name": "Tabbi SDK",
   "readme": "none",
   "includeVersion": true,
   "excludePrivate": true,
   "excludeInternal": true,
   "hideGenerator": true,
   "navigationLinks": {
-    "GitHub": "https://github.com/your-org/agent-api",
-    "API Docs": "https://api.agent-api.com/docs"
+    "GitHub": "https://github.com/tabbi-ai/tabbi",
+    "API Docs": "https://api.tabbi.sh/docs"
   },
   "customCss": "./typedoc.css"
 }

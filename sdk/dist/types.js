@@ -1,31 +1,31 @@
 /**
- * Agent API SDK Types
+ * Tabbi SDK Types
  * @packageDocumentation
  */
 // ============================================================================
 // Error Types
 // ============================================================================
 /**
- * Error thrown by the Agent API SDK
+ * Error thrown by the Tabbi SDK
  *
  * @example
  * ```typescript
  * try {
  *   await session.sendMessage("...");
  * } catch (error) {
- *   if (error instanceof AgentAPIError) {
+ *   if (error instanceof TabbiError) {
  *     console.error(`Error ${error.code}: ${error.message}`);
  *     console.error(`HTTP Status: ${error.status}`);
  *   }
  * }
  * ```
  */
-export class AgentAPIError extends Error {
+export class TabbiError extends Error {
     code;
     details;
     status;
     /**
-     * Create a new AgentAPIError
+     * Create a new TabbiError
      * @param code - Error code (e.g., "SESSION_NOT_FOUND")
      * @param message - Human-readable error message
      * @param details - Additional error details
@@ -36,7 +36,7 @@ export class AgentAPIError extends Error {
         this.code = code;
         this.details = details;
         this.status = status;
-        this.name = "AgentAPIError";
+        this.name = "TabbiError";
     }
 }
 //# sourceMappingURL=types.js.map

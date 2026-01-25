@@ -1,6 +1,6 @@
 # CLI Chat Example
 
-A simple command-line interface for chatting with an AI agent using the Agent API SDK.
+A simple command-line interface for chatting with an AI agent using the Tabbi SDK.
 
 ## Setup
 
@@ -11,7 +11,7 @@ A simple command-line interface for chatting with an AI agent using the Agent AP
 
 2. Set your API key:
    ```bash
-   export AGENT_API_KEY=aa_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   export TABBI_API_KEY=tb_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
    ```
 
 3. Make sure the API is running locally:
@@ -21,7 +21,7 @@ A simple command-line interface for chatting with an AI agent using the Agent AP
 
    The example defaults to `http://localhost:8787`. To use a different URL:
    ```bash
-   export AGENT_API_URL=https://your-api.example.com
+   export TABBI_API_URL=https://your-api.example.com
    ```
 
 ## Usage
@@ -43,7 +43,7 @@ npm start
 ### Example Session
 
 ```
-=== Agent API CLI Chat ===
+=== Tabbi CLI Chat ===
 
 Creating a new session...
 

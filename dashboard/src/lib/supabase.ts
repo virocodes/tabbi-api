@@ -45,8 +45,8 @@ export async function createApiKey(
     .join("")
     .slice(0, 32);
 
-  const apiKey = `aa_${environment}_${randomPart}`;
-  const keyPrefix = `aa_${environment}_`;
+  const apiKey = `tb_${environment}_${randomPart}`;
+  const keyPrefix = `tb_${environment}_`;
 
   // Hash the key
   const encoder = new TextEncoder();

@@ -1,20 +1,20 @@
 /**
- * OpenAPI Specification for Agent API
+ * OpenAPI Specification for Tabbi API
  */
 
 export const openApiSpec = {
   openapi: "3.1.0",
   info: {
-    title: "Agent API",
+    title: "Tabbi API",
     description: `REST API for building AI coding agent applications. Abstracts infrastructure complexity by providing simple endpoints for session management, message streaming, and file access.
 
 ## Authentication
 All requests require an API key in the Authorization header:
 \`\`\`
-Authorization: Bearer aa_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Authorization: Bearer tb_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 \`\`\`
 
-API keys follow the format \`aa_{environment}_{32 alphanumeric characters}\` where environment is either \`live\` or \`test\`.
+API keys follow the format \`tb_{environment}_{32 alphanumeric characters}\` where environment is either \`live\` or \`test\`.
 
 ## Streaming
 The \`/messages\` endpoint returns Server-Sent Events (SSE) for real-time streaming of agent responses, tool calls, and status updates.`,
@@ -22,7 +22,7 @@ The \`/messages\` endpoint returns Server-Sent Events (SSE) for real-time stream
     license: { name: "MIT" },
   },
   servers: [
-    { url: "https://api.agent-api.com", description: "Production" },
+    { url: "https://api.tabbi.sh", description: "Production" },
     { url: "http://localhost:8787", description: "Local Development" },
   ],
   security: [{ bearerAuth: [] }],
@@ -227,7 +227,7 @@ The \`/messages\` endpoint returns Server-Sent Events (SSE) for real-time stream
       bearerAuth: {
         type: "http",
         scheme: "bearer",
-        description: "API key in format `aa_live_xxx` or `aa_test_xxx`",
+        description: "API key in format `tb_live_xxx` or `tb_test_xxx`",
       },
     },
     parameters: {

@@ -7,13 +7,13 @@
  *   npx ts-node index.ts
  *
  * Environment variables:
- *   AGENT_API_KEY - Your Agent API key (required)
- *   AGENT_API_URL - Custom API URL (optional)
+ *   TABBI_API_KEY - Your Tabbi API key (required)
+ *   TABBI_API_URL - Custom API URL (optional)
  */
 
 import * as readline from "readline";
-import { AgentAPI, AgentAPIError } from "@agent-api/sdk";
-import type { SSEEvent } from "@agent-api/sdk";
+import { Tabbi, TabbiError } from "@tabbi/sdk";
+import type { SSEEvent } from "@tabbi/sdk";
 
 // ANSI color codes for terminal output
 const colors = {
@@ -34,29 +34,29 @@ function log(color: keyof typeof colors, ...args: unknown[]) {
 
 async function main() {
   // Get API key from environment
-  const apiKey = process.env.AGENT_API_KEY;
+  const apiKey = process.env.TABBI_API_KEY;
   if (!apiKey) {
-    log("red", "Error: AGENT_API_KEY environment variable is required");
-    log("dim", "Set it with: export AGENT_API_KEY=aa_test_xxx");
+    log("red", "Error: TABBI_API_KEY environment variable is required");
+    log("dim", "Set it with: export TABBI_API_KEY=tb_test_xxx");
     process.exit(1);
   }
 
   // Initialize the client
-  const baseUrl = process.env.AGENT_API_URL || "http://localhost:8787";
-  const agent = new AgentAPI({
+  const baseUrl = process.env.TABBI_API_URL || "http://localhost:8787";
+  const tabbi = new Tabbi({
     apiKey,
     baseUrl,
   });
 
   log("dim", `Connecting to: ${baseUrl}`);
 
-  log("cyan", "\n=== Agent API CLI Chat ===\n");
+  log("cyan", "\n=== Tabbi CLI Chat ===\n");
   log("dim", "Creating a new session...\n");
 
   // Create a session
   let session;
   try {
-    session = await agent.createSession();
+    session = await tabbi.createSession();
     log("green", `Session created: ${session.id}`);
     log("dim", "Waiting for sandbox to be ready...\n");
 
@@ -64,7 +64,7 @@ async function main() {
     await session.waitForReady(120000);
     log("green", "Session is ready!\n");
   } catch (error) {
-    if (error instanceof AgentAPIError) {
+    if (error instanceof TabbiError) {
       log("red", `Failed to create session: ${error.code} - ${error.message}`);
     } else {
       log("red", `Failed to create session: ${error}`);
@@ -112,7 +112,7 @@ async function main() {
 
         console.log("\n");
       } catch (error) {
-        if (error instanceof AgentAPIError) {
+        if (error instanceof TabbiError) {
           log("red", `\nError: ${error.code} - ${error.message}`);
         } else {
           log("red", `\nError: ${error}`);
@@ -141,7 +141,7 @@ async function main() {
           }
           console.log();
         } catch (error) {
-          if (error instanceof AgentAPIError) {
+          if (error instanceof TabbiError) {
             log("red", `Error listing files: ${error.message}`);
           }
         }
@@ -159,7 +159,7 @@ async function main() {
           console.log(content);
           log("cyan", "--- end ---\n");
         } catch (error) {
-          if (error instanceof AgentAPIError) {
+          if (error instanceof TabbiError) {
             log("red", `Error reading file: ${error.message}`);
           }
         }

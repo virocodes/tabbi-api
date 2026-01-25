@@ -1,15 +1,15 @@
 /**
- * Agent API SDK
+ * Tabbi SDK
  *
- * TypeScript SDK for building applications with the Agent API.
+ * TypeScript SDK for building applications with Tabbi.
  *
  * @example
  * ```typescript
- * import { AgentAPI } from "@agent-api/sdk";
+ * import { Tabbi } from "@tabbi/sdk";
  *
- * const agent = new AgentAPI({ apiKey: "aa_live_xxx" });
+ * const tabbi = new Tabbi({ apiKey: "tb_live_xxx" });
  *
- * const session = await agent.createSession({
+ * const session = await tabbi.createSession({
  *   repo: "owner/repo",
  *   gitToken: "ghp_xxx"
  * });
@@ -27,7 +27,7 @@
  * ```
  */
 // Export main classes
-export { AgentAPI, Session } from "./client";
+export { Tabbi, Session } from "./client";
 // Export error class
-export { AgentAPIError } from "./types";
+export { TabbiError } from "./types";
 //# sourceMappingURL=index.js.map

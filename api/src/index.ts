@@ -1,5 +1,5 @@
 /**
- * Agent API - Cloudflare Workers Entry Point
+ * Tabbi API - Cloudflare Workers Entry Point
  *
  * REST API for building "Claude Code wrapper" products with:
  * - POST   /v1/sessions              → Create session with sandbox
@@ -44,7 +44,7 @@ app.get("/docs", (c) => {
   const html = `<!DOCTYPE html>
 <html>
 <head>
-  <title>Agent API Documentation</title>
+  <title>Tabbi API Documentation</title>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>

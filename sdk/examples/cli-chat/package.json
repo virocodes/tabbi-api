@@ -1,7 +1,7 @@
 {
   "name": "cli-chat-example",
   "version": "1.0.0",
-  "description": "Simple CLI chat example using Agent API SDK",
+  "description": "Simple CLI chat example using Tabbi SDK",
   "type": "module",
   "main": "index.ts",
   "scripts": {
@@ -10,7 +10,7 @@
     "start:built": "node dist/index.js"
   },
   "dependencies": {
-    "@agent-api/sdk": "file:../../"
+    "@tabbi/sdk": "file:../../"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

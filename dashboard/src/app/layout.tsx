@@ -4,7 +4,7 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Agent API",
+  title: "Tabbi",
   description: "AI coding agents in sandboxed environments",
 };
 

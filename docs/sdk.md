@@ -1,25 +1,25 @@
-# Agent API SDK
+# Tabbi SDK
 
 TypeScript SDK for building AI coding agent applications.
 
 ## Installation
 
 ```bash
-npm install @agent-api/sdk
+npm install @tabbi/sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { AgentAPI } from "@agent-api/sdk";
+import { Tabbi } from "@tabbi/sdk";
 
 // Initialize the client
-const agent = new AgentAPI({
-  apiKey: "aa_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+const tabbi = new Tabbi({
+  apiKey: "tb_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 });
 
 // Create a session
-const session = await agent.createSession();
+const session = await tabbi.createSession();
 
 // Send a message and stream the response
 const message = await session.sendMessage("Create a hello world app", {
@@ -40,20 +40,20 @@ await session.delete();
 
 ## API Reference
 
-### `AgentAPI`
+### `Tabbi`
 
-Main client class for interacting with the Agent API.
+Main client class for interacting with the Tabbi API.
 
 #### Constructor
 
 ```typescript
-new AgentAPI(config: AgentAPIConfig)
+new Tabbi(config: TabbiConfig)
 ```
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `config.apiKey` | `string` | Yes | API key (`aa_live_xxx` or `aa_test_xxx`) |
-| `config.baseUrl` | `string` | No | API base URL (default: `https://api.agent-api.com`) |
+| `config.apiKey` | `string` | Yes | API key (`tb_live_xxx` or `tb_test_xxx`) |
+| `config.baseUrl` | `string` | No | API base URL (default: `https://api.tabbi.sh`) |
 | `config.timeout` | `number` | No | Request timeout in ms (default: `30000`) |
 
 #### Methods
@@ -63,7 +63,7 @@ new AgentAPI(config: AgentAPIConfig)
 Create a new session with an isolated sandbox environment.
 
 ```typescript
-const session = await agent.createSession({
+const session = await tabbi.createSession({
   repo: "owner/repo",        // Optional: Git repository to clone
   gitToken: "ghp_xxx"        // Optional: Token for private repos
 });
@@ -76,7 +76,7 @@ const session = await agent.createSession({
 Get an existing session by ID.
 
 ```typescript
-const session = agent.getSession("e2e1091c-daa3-42de-ba3b-0d0a05e72fc1");
+const session = tabbi.getSession("e2e1091c-daa3-42de-ba3b-0d0a05e72fc1");
 ```
 
 **Returns:** `Session`
@@ -263,15 +263,15 @@ interface Message {
 
 ## Error Handling
 
-The SDK throws `AgentAPIError` for API errors.
+The SDK throws `TabbiError` for API errors.
 
 ```typescript
-import { AgentAPIError } from "@agent-api/sdk";
+import { TabbiError } from "@tabbi/sdk";
 
 try {
   await session.sendMessage("...");
 } catch (error) {
-  if (error instanceof AgentAPIError) {
+  if (error instanceof TabbiError) {
     console.error(`Error ${error.code}: ${error.message}`);
     console.error(`HTTP Status: ${error.status}`);
     console.error(`Details:`, error.details);
@@ -300,12 +300,12 @@ try {
 ### Basic Usage
 
 ```typescript
-import { AgentAPI } from "@agent-api/sdk";
+import { Tabbi } from "@tabbi/sdk";
 
-const agent = new AgentAPI({ apiKey: process.env.AGENT_API_KEY! });
+const tabbi = new Tabbi({ apiKey: process.env.TABBI_API_KEY! });
 
 async function main() {
-  const session = await agent.createSession();
+  const session = await tabbi.createSession();
 
   try {
     // Wait for sandbox to be ready
@@ -335,7 +335,7 @@ main();
 ### Working with Git Repositories
 
 ```typescript
-const session = await agent.createSession({
+const session = await tabbi.createSession({
   repo: "myorg/myrepo",
   gitToken: process.env.GITHUB_TOKEN
 });
@@ -354,8 +354,8 @@ const newContent = await session.getFileText("/src/auth.ts");
 export async function POST(req: Request) {
   const { sessionId, content } = await req.json();
 
-  const agent = new AgentAPI({ apiKey: process.env.AGENT_API_KEY! });
-  const session = agent.getSession(sessionId);
+  const tabbi = new Tabbi({ apiKey: process.env.TABBI_API_KEY! });
+  const session = tabbi.getSession(sessionId);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -415,6 +415,6 @@ try {
 ## Environment Variables
 
 ```bash
-AGENT_API_KEY=aa_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-AGENT_API_URL=https://api.agent-api.com  # Optional
+TABBI_API_KEY=tb_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TABBI_API_URL=https://api.tabbi.sh  # Optional
 ```

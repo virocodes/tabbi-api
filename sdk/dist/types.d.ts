@@ -1,19 +1,19 @@
 /**
- * Agent API SDK Types
+ * Tabbi SDK Types
  * @packageDocumentation
  */
 /**
- * Configuration options for the AgentAPI client
+ * Configuration options for the Tabbi client
  */
-export interface AgentAPIConfig {
+export interface TabbiConfig {
     /**
      * API key for authentication.
-     * Format: `aa_live_xxx` for production or `aa_test_xxx` for testing
+     * Format: `tb_live_xxx` for production or `tb_test_xxx` for testing
      */
     apiKey: string;
     /**
      * Base URL for the API
-     * @defaultValue `https://api.agent-api.com`
+     * @defaultValue `https://api.tabbi.sh`
      */
     baseUrl?: string;
     /**
@@ -233,26 +233,26 @@ export interface ListFilesResponse {
     files: FileInfo[];
 }
 /**
- * Error thrown by the Agent API SDK
+ * Error thrown by the Tabbi SDK
  *
  * @example
  * ```typescript
  * try {
  *   await session.sendMessage("...");
  * } catch (error) {
- *   if (error instanceof AgentAPIError) {
+ *   if (error instanceof TabbiError) {
  *     console.error(`Error ${error.code}: ${error.message}`);
  *     console.error(`HTTP Status: ${error.status}`);
  *   }
  * }
  * ```
  */
-export declare class AgentAPIError extends Error {
+export declare class TabbiError extends Error {
     code: string;
     details?: Record<string, unknown> | undefined;
     status?: number | undefined;
     /**
-     * Create a new AgentAPIError
+     * Create a new TabbiError
      * @param code - Error code (e.g., "SESSION_NOT_FOUND")
      * @param message - Human-readable error message
      * @param details - Additional error details

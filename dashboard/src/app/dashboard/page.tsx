@@ -194,7 +194,7 @@ export default function DashboardPage() {
       {/* Terminal decoration */}
       <div className="fixed bottom-6 left-6 hidden lg:flex items-center gap-2 text-text-muted font-mono text-xs">
         <span className="text-accent">~</span>
-        <span>agent-api</span>
+        <span>tabbi</span>
         <span className="text-accent">$</span>
         <span className="w-1.5 h-3 bg-accent animate-blink" />
       </div>
