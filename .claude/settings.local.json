@@ -7,7 +7,22 @@
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
       "WebFetch(domain:developers.cloudflare.com)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: comprehensive audit fixes for production readiness\n\nCritical Fixes:\n- Rate limiting now uses atomic Redis pipeline to prevent race conditions\n- Modal client includes retry logic with exponential backoff\n- Database operations use proper error handling with waitUntil\n- Session state no longer blocks on sandbox creation \\(returns immediately\\)\n\nHigh Severity Fixes:\n- Modal environment suffix is now configurable via MODAL_ENVIRONMENT\n- Removed blocking 60s poll loop - clients now poll /v1/sessions/:id\n- Added input validation for all requests \\(repo format, message content\\)\n- Secrets stored in DO state at init, not passed in every request header\n\nMedium Severity Fixes:\n- Consolidated types in single source of truth \\(api/src/types.ts\\)\n- Consistent error codes \\(VALIDATION_ERROR vs INTERNAL_ERROR\\)\n- Structured JSON logging with request ID correlation\n- Removed unused messages field from SessionState\n- SDK uses polyfilled UUID generation for older Node.js versions\n- Request ID propagation via X-Request-ID header\n\nLow Severity Fixes:\n- Added composite database indexes for common query patterns\n- SDK waitForReady uses exponential backoff \\(500ms -> 3s cap\\)\n- Removed debug endpoint from production code\n- Consistent null handling throughout codebase\n- Added health endpoint to Durable Object\n\nNew utilities:\n- api/src/utils/logger.ts - Structured logging with child loggers\n- api/src/utils/retry.ts - Retry with exponential backoff\n- api/src/utils/validation.ts - Input validation utilities\n- api/src/utils/database.ts - Database operations with retry\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: comprehensive audit fixes for production readiness\n\nCritical Fixes:\n- Rate limiting now uses atomic Redis pipeline to prevent race conditions\n- Modal client includes retry logic with exponential backoff\n- Database operations use proper error handling with waitUntil\n- Session state no longer blocks on sandbox creation \\(returns immediately\\)\n\nHigh Severity Fixes:\n- Modal environment suffix is now configurable via MODAL_ENVIRONMENT\n- Removed blocking 60s poll loop - clients now poll /v1/sessions/:id\n- Added input validation for all requests \\(repo format, message content\\)\n- Secrets stored in DO state at init, not passed in every request header\n\nMedium Severity Fixes:\n- Consolidated types in single source of truth \\(api/src/types.ts\\)\n- Consistent error codes \\(VALIDATION_ERROR vs INTERNAL_ERROR\\)\n- Structured JSON logging with request ID correlation\n- Removed unused messages field from SessionState\n- SDK uses polyfilled UUID generation for older Node.js versions\n- Request ID propagation via X-Request-ID header\n\nLow Severity Fixes:\n- Added composite database indexes for common query patterns\n- SDK waitForReady uses exponential backoff \\(500ms -> 3s cap\\)\n- Removed debug endpoint from production code\n- Consistent null handling throughout codebase\n- Added health endpoint to Durable Object\n\nNew utilities:\n- api/src/utils/logger.ts - Structured logging with child loggers\n- api/src/utils/retry.ts - Retry with exponential backoff\n- api/src/utils/validation.ts - Input validation utilities\n- api/src/utils/database.ts - Database operations with retry\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)",
+      "Bash(git -C /Users/dharshanbellan/Documents/Projects/_current/agent-api log --oneline --graph -20)",
+      "WebFetch(domain:www.daytona.io)",
+      "WebFetch(domain:e2b.dev)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.superagent.sh)",
+      "Bash(ls:*)",
+      "Bash(git checkout:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(node --version:*)",
+      "Bash(git add:*)",
+      "Bash(git merge:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)"
     ]
   }
 }

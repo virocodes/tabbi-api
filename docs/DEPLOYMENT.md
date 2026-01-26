@@ -5,10 +5,10 @@ This guide gets your Tabbi MVP to production as fast as possible using the servi
 ## Architecture Overview
 
 ```
-┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
-│   SDK Client    │────▶│  Cloudflare Workers  │────▶│  Modal Sandbox  │
-└─────────────────┘     │  + Durable Objects   │     │  (OpenCode)     │
-                        └──────────────────────┘     └─────────────────┘
+┌─────────────────┐     ┌──────────────────────┐     ┌──────────────────┐
+│   SDK Client    │────▶│  Cloudflare Workers  │────▶│  Daytona Sandbox │
+└─────────────────┘     │  + Durable Objects   │     │   (OpenCode)     │
+                        └──────────────────────┘     └──────────────────┘
                                    │
                     ┌──────────────┼──────────────┐
                     ▼              ▼              ▼
@@ -31,11 +31,11 @@ This guide gets your Tabbi MVP to production as fast as possible using the servi
 | [Supabase](https://supabase.com) | PostgreSQL + Auth + RLS | 500 MB, 50k MAU | 10 min |
 | [Cloudflare Workers](https://workers.cloudflare.com) | API hosting + Durable Objects | 100k req/day | 5 min |
 | [Upstash](https://upstash.com) | Redis rate limiting | 10k commands/day | 3 min |
-| [Modal](https://modal.com) | Sandbox compute | $30/month credits | 10 min |
+| [Daytona](https://daytona.io) | Sandbox compute | $30 free credits | 5 min |
 | [Anthropic](https://console.anthropic.com) | Claude API | Pay-as-you-go | 2 min |
 | [Vercel](https://vercel.com) | Dashboard hosting | Unlimited sites | 5 min |
 
-**Total setup time: ~35 minutes**
+**Total setup time: ~30 minutes**
 
 ---
 
@@ -104,43 +104,38 @@ These go into your Cloudflare Workers secrets.
 
 ---
 
-## Step 3: Modal Sandbox (10 min)
+## Step 3: Daytona Sandbox (5 min)
+
+Daytona provides fast sandbox compute with built-in pause/resume and file operations.
 
 ### 3.1 Create Account
 
-1. Go to [modal.com](https://modal.com) and sign up
-2. Install the Modal CLI:
-   ```bash
-   pip install modal
-   modal token new
-   ```
+1. Go to [app.daytona.io](https://app.daytona.io) and sign up
+2. Get your API key from the dashboard
 
-### 3.2 Deploy Sandbox
+### 3.2 Create Snapshot
+
+Build and push the Docker image for the sandbox:
 
 ```bash
-cd sandbox
+cd daytona
 
-# Deploy to Modal
-modal deploy sandbox.py
+# Build the image
+docker build -t opencode-sandbox:v1 .
+
+# Create a Daytona snapshot from the image
+daytona snapshot create --name opencode-sandbox --image opencode-sandbox:v1
 ```
 
-After deployment, Modal will show you the endpoint URLs:
-```
-✓ Created api-create-sandbox => https://your-workspace--agent-sandbox-api-create-sandbox-dev.modal.run
-✓ Created api-pause-sandbox  => https://your-workspace--agent-sandbox-api-pause-sandbox-dev.modal.run
-...
-```
+Note the snapshot ID from the output - you'll need this for `DAYTONA_SNAPSHOT_ID`.
 
-Your `MODAL_API_URL` is the base: `https://your-workspace--agent-sandbox`
+### 3.3 Credentials
 
-### 3.3 For Production
+From the Daytona dashboard, you'll need:
+- **API Key**: Your Daytona API key
+- **Snapshot ID**: The ID from the snapshot create command
 
-```bash
-# Deploy to production environment
-modal deploy sandbox.py --env=prod
-```
-
-Then set `MODAL_ENVIRONMENT=prod` in your Cloudflare Workers.
+These go into your Cloudflare Workers secrets.
 
 ---
 
@@ -182,7 +177,7 @@ new_classes = ["SessionAgent"]
 
 # Environment variables (non-secret)
 [vars]
-MODAL_ENVIRONMENT = "dev"  # or "prod"
+DAYTONA_API_URL = "https://api.daytona.io"
 ```
 
 ### 5.3 Set Secrets
@@ -203,11 +198,11 @@ wrangler secret put UPSTASH_REDIS_URL
 wrangler secret put UPSTASH_REDIS_TOKEN
 # Paste: AXxxxxxxxxxxxx
 
-wrangler secret put MODAL_API_URL
-# Paste: https://your-workspace--agent-sandbox
+wrangler secret put DAYTONA_API_KEY
+# Paste: your-daytona-api-key
 
-wrangler secret put MODAL_API_SECRET
-# Paste: (optional - for Modal auth if you set it up)
+wrangler secret put DAYTONA_SNAPSHOT_ID
+# Paste: your-snapshot-id
 
 wrangler secret put ANTHROPIC_API_KEY
 # Paste: sk-ant-xxxxx
@@ -337,9 +332,9 @@ await session.delete();
 | `SUPABASE_SERVICE_KEY` | Supabase Settings > API | `eyJhbG...` (service_role) |
 | `UPSTASH_REDIS_URL` | Upstash dashboard | `https://xxx.upstash.io` |
 | `UPSTASH_REDIS_TOKEN` | Upstash dashboard | `AXxxxxxxxxxxxx` |
-| `MODAL_API_URL` | Modal deploy output | `https://workspace--agent-sandbox` |
-| `MODAL_API_SECRET` | Your choice (optional) | `your-secret-here` |
-| `MODAL_ENVIRONMENT` | `dev` or `prod` | `dev` |
+| `DAYTONA_API_KEY` | Daytona dashboard | `your-api-key` |
+| `DAYTONA_API_URL` | Default or self-hosted | `https://api.daytona.io` |
+| `DAYTONA_SNAPSHOT_ID` | Snapshot create output | `your-snapshot-id` |
 | `ANTHROPIC_API_KEY` | Anthropic console | `sk-ant-xxxxx` |
 
 ### Dashboard (Vercel)
@@ -358,7 +353,7 @@ await session.delete();
 | Supabase | 500 MB, 50k MAU | $25/month for 8 GB |
 | Cloudflare Workers | 100k req/day | $5/month for 10M req |
 | Upstash | 10k commands/day | $0.20/100k commands |
-| Modal | $30/month credits | ~$0.0001/sec compute |
+| Daytona | $30 free credits | ~$0.0001/sec compute |
 | Anthropic | Pay-as-you-go | ~$3-15/1M tokens |
 | Vercel | Unlimited hobby | $20/month for Pro |
 
@@ -373,17 +368,19 @@ await session.delete();
 - Check key isn't revoked (`revoked_at` should be NULL)
 
 ### "Sandbox creation failed"
-- Check Modal deployment is running: `modal app list`
-- Verify `MODAL_API_URL` format (no trailing slash, no `-dev.modal.run`)
+- Verify `DAYTONA_API_KEY` is correct and not expired
+- Verify `DAYTONA_SNAPSHOT_ID` points to a valid snapshot
 - Check Anthropic API key is valid
+- Check Daytona dashboard for sandbox status
 
 ### "Rate limit exceeded"
 - Upstash Redis is configured correctly
 - Check `UPSTASH_REDIS_URL` starts with `https://`
 
 ### Sessions stuck in "starting"
-- Check Modal logs: `modal app logs agent-sandbox`
+- Check sandbox logs via the API: `GET /v1/sessions/:id/logs`
 - Verify OpenCode server starts correctly in sandbox
+- Check Daytona dashboard for sandbox health
 
 ### Dashboard auth not working
 - Verify `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set
@@ -412,7 +409,7 @@ await session.delete();
 
 ### API (Cloudflare Workers)
 - [ ] All secrets set in Cloudflare Workers
-- [ ] Modal sandbox deployed (dev or prod)
+- [ ] Daytona snapshot created and tested
 - [ ] Custom domain configured (optional but recommended)
 - [ ] Rate limits appropriate for your use case
 
