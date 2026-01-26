@@ -123,6 +123,10 @@ export class SessionAgent extends DurableObject {
         return this.handleInitialize(request);
       }
 
+      if (path === "/initialize-stream" && request.method === "POST") {
+        return this.handleInitializeStream(request);
+      }
+
       if (path === "/prompt-stream" && request.method === "POST") {
         return this.handlePromptStream(request);
       }
@@ -246,6 +250,165 @@ export class SessionAgent extends DurableObject {
   }
 
   /**
+   * Initialize a new session with SSE streaming progress
+   */
+  private async handleInitializeStream(request: Request): Promise<Response> {
+    const body = await request.json<{
+      sessionId: string;
+      apiKeyId: string;
+      userId: string;
+      repo?: string;
+      gitToken?: string;
+      anthropicApiKey: string;
+      sandboxServiceUrl: string;
+      sandboxServiceApiKey: string;
+    }>();
+
+    this.log = this.log.child({ sessionId: body.sessionId });
+
+    const encoder = new TextEncoder();
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+
+    const sendEvent = async (type: string, data: Record<string, unknown>) => {
+      const event = { type, data, timestamp: new Date().toISOString() };
+      await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+    };
+
+    // Check if already initialized
+    const existingState = await this.getState();
+    if (existingState && existingState.status === "idle") {
+      this.log.info("Session already initialized and ready");
+      this.ctx.waitUntil((async () => {
+        await sendEvent("session.created", { id: body.sessionId });
+        await sendEvent("session.ready", { id: body.sessionId, status: "idle" });
+        await writer.close();
+      })());
+      return new Response(readable, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          "Connection": "keep-alive",
+        },
+      });
+    }
+
+    // Store configuration securely
+    const config: SessionConfig = {
+      anthropicApiKey: body.anthropicApiKey,
+      sandboxServiceUrl: body.sandboxServiceUrl,
+      sandboxServiceApiKey: body.sandboxServiceApiKey,
+    };
+    await this.setConfig(config);
+
+    // Create initial state
+    const now = new Date().toISOString();
+    const state: SessionState = {
+      sessionId: body.sessionId,
+      status: "starting",
+      sandboxId: null,
+      sandboxUrl: null,
+      snapshotId: null,
+      opencodeSessionId: null,
+      isProcessing: false,
+      repo: body.repo || null,
+      createdAt: now,
+      lastActivityAt: now,
+    };
+
+    // Store ownership info
+    this.sql.exec(
+      "INSERT OR REPLACE INTO session_state (key, value) VALUES ('apiKeyId', ?)",
+      body.apiKeyId
+    );
+    this.sql.exec(
+      "INSERT OR REPLACE INTO session_state (key, value) VALUES ('userId', ?)",
+      body.userId
+    );
+
+    await this.setState(state);
+
+    this.log.info("Session initialized, starting sandbox creation with streaming");
+
+    // Create sandbox with progress events
+    this.ctx.waitUntil((async () => {
+      try {
+        await sendEvent("session.created", { id: body.sessionId });
+        await sendEvent("session.progress", { message: "Creating sandbox..." });
+
+        const proxy = new SandboxProxyClient(
+          config.sandboxServiceUrl,
+          config.sandboxServiceApiKey
+        );
+
+        const result = await proxy.createSandbox({
+          anthropicApiKey: config.anthropicApiKey,
+          repo: body.repo,
+          gitToken: body.gitToken,
+        });
+
+        const currentState = await this.getState();
+        if (!currentState) {
+          throw new Error("State disappeared during sandbox creation");
+        }
+
+        currentState.sandboxId = result.sandboxId;
+        currentState.sandboxUrl = result.previewUrl;
+        currentState.lastActivityAt = new Date().toISOString();
+
+        await sendEvent("session.progress", { message: "Sandbox ready, configuring session..." });
+
+        // Use inline session ID if available
+        if (result.opencodeSessionId) {
+          currentState.opencodeSessionId = result.opencodeSessionId;
+          currentState.status = "idle";
+          await this.setState(currentState);
+          this.log.info("Session ready (inline)", {
+            sandboxId: result.sandboxId,
+            opencodeSessionId: result.opencodeSessionId,
+          });
+        } else {
+          // Fallback: create session via proxy
+          this.log.info("No inline session ID, creating via proxy");
+          const session = await proxy.getOrCreateSession(result.previewUrl);
+          currentState.opencodeSessionId = session.id;
+          currentState.status = "idle";
+          await this.setState(currentState);
+          this.log.info("Session ready (fallback)", { opencodeSessionId: session.id });
+        }
+
+        await sendEvent("session.ready", {
+          id: body.sessionId,
+          status: "idle",
+        });
+      } catch (error) {
+        this.log.error("Sandbox creation failed", error);
+
+        const currentState = await this.getState();
+        if (currentState) {
+          currentState.status = "error";
+          await this.setState(currentState);
+        }
+
+        await sendEvent("session.error", {
+          code: "SANDBOX_CREATE_FAILED",
+          message: error instanceof Error ? error.message : "Failed to create sandbox",
+        });
+      } finally {
+        await writer.close();
+      }
+    })());
+
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+      },
+    });
+  }
+
+  /**
    * Create sandbox asynchronously via sandbox service
    */
   private async createSandbox(
@@ -278,17 +441,26 @@ export class SessionAgent extends DurableObject {
       state.sandboxUrl = result.previewUrl;
       state.lastActivityAt = new Date().toISOString();
 
-      this.log.info("Sandbox created, initializing OpenCode session", {
-        sandboxId: result.sandboxId,
-      });
-
-      // Initialize OpenCode session via proxy
-      const session = await proxy.getOrCreateSession(result.previewUrl);
-      state.opencodeSessionId = session.id;
-      state.status = "idle";
-
-      await this.setState(state);
-      this.log.info("Session ready", { opencodeSessionId: session.id });
+      // Session ID is now returned inline from sandbox creation (saves ~3s)
+      if (result.opencodeSessionId) {
+        state.opencodeSessionId = result.opencodeSessionId;
+        state.status = "idle";
+        await this.setState(state);
+        this.log.info("Session ready (inline)", {
+          sandboxId: result.sandboxId,
+          opencodeSessionId: result.opencodeSessionId,
+        });
+      } else {
+        // Fallback: create session if not returned (shouldn't happen with new implementation)
+        this.log.info("No inline session ID, creating via proxy", {
+          sandboxId: result.sandboxId,
+        });
+        const session = await proxy.getOrCreateSession(result.previewUrl);
+        state.opencodeSessionId = session.id;
+        state.status = "idle";
+        await this.setState(state);
+        this.log.info("Session ready (fallback)", { opencodeSessionId: session.id });
+      }
     } catch (error) {
       this.log.error("Sandbox creation failed", error);
 
@@ -373,9 +545,7 @@ export class SessionAgent extends DurableObject {
           state.opencodeSessionId || undefined
         );
         state.sandboxUrl = result.previewUrl;
-
-        const session = await proxy.getOrCreateSession(result.previewUrl);
-        state.opencodeSessionId = session.id;
+        // Keep the existing session ID - it's restored by resumeSandbox
         state.status = "running";
         await this.setState(state);
       } catch (error) {

@@ -49,9 +49,27 @@ paths:
         The sandbox includes a full development environment with the OpenCode agent.
 
         Optionally clone a Git repository into the workspace.
+
+        **Streaming Mode (Recommended):**
+        Include `Accept: text/event-stream` header to receive real-time progress events
+        via Server-Sent Events (SSE). The stream completes when the session is ready.
+
+        **JSON Mode (Legacy):**
+        Without the Accept header, returns immediately with `status: "starting"`.
+        Client must poll `GET /v1/sessions/{id}` until status changes to `idle`.
       operationId: createSession
       tags:
         - Sessions
+      parameters:
+        - name: Accept
+          in: header
+          description: Set to `text/event-stream` for SSE streaming mode
+          schema:
+            type: string
+            enum:
+              - application/json
+              - text/event-stream
+          example: "text/event-stream"
       requestBody:
         required: false
         content:
@@ -68,8 +86,25 @@ paths:
                   repo: "owner/repo"
                   gitToken: "ghp_xxxxxxxxxxxx"
       responses:
+        '200':
+          description: SSE stream of session creation progress (when Accept is text/event-stream)
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/SessionCreationEvent'
+              examples:
+                stream:
+                  summary: Example event stream
+                  value: |
+                    data: {"type":"session.created","data":{"id":"e2e1091c-daa3-42de-ba3b-0d0a05e72fc1"},"timestamp":"2026-01-23T11:44:00.114Z"}
+
+                    data: {"type":"session.progress","data":{"message":"Creating sandbox..."},"timestamp":"2026-01-23T11:44:00.200Z"}
+
+                    data: {"type":"session.progress","data":{"message":"Sandbox ready, configuring session..."},"timestamp":"2026-01-23T11:44:05.100Z"}
+
+                    data: {"type":"session.ready","data":{"id":"e2e1091c-daa3-42de-ba3b-0d0a05e72fc1","status":"idle"},"timestamp":"2026-01-23T11:44:05.300Z"}
         '201':
-          description: Session created successfully
+          description: Session created successfully (JSON mode)
           content:
             application/json:
               schema:
@@ -217,6 +252,38 @@ paths:
           $ref: '#/components/responses/InternalError'
 
   /v1/sessions/{sessionId}:
+    get:
+      summary: Get Session
+      description: |
+        Get the current status of a session.
+
+        Use this to poll for session readiness when using JSON mode for session creation.
+        When using SSE streaming mode, polling is not needed.
+      operationId: getSession
+      tags:
+        - Sessions
+      parameters:
+        - $ref: '#/components/parameters/sessionId'
+      responses:
+        '200':
+          description: Session status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSessionResponse'
+              example:
+                id: "e2e1091c-daa3-42de-ba3b-0d0a05e72fc1"
+                status: "idle"
+                createdAt: "2026-01-23T11:44:00.114Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
     delete:
       summary: Delete Session
       description: |
@@ -394,6 +461,37 @@ components:
 
         **Error Events:**
         - `error` - An error occurred
+
+    SessionCreationEvent:
+      type: object
+      required:
+        - type
+        - data
+        - timestamp
+      properties:
+        type:
+          type: string
+          enum:
+            - session.created
+            - session.progress
+            - session.ready
+            - session.error
+          description: |
+            - `session.created` - Session ID assigned
+            - `session.progress` - Progress update with message
+            - `session.ready` - Session is ready to use
+            - `session.error` - Error occurred during creation
+        data:
+          type: object
+          description: Event-specific data
+        timestamp:
+          type: string
+          format: date-time
+      example:
+        type: "session.progress"
+        data:
+          message: "Creating sandbox..."
+        timestamp: "2026-01-23T11:44:00.200Z"
 
     FileInfo:
       type: object

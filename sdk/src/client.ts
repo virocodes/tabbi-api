@@ -13,6 +13,7 @@ import type {
   FileInfo,
   ListFilesResponse,
   APIErrorResponse,
+  SessionProgressEvent,
 } from "./types";
 import { TabbiError } from "./types";
 
@@ -92,31 +93,143 @@ export class Tabbi {
    * The sandbox includes a full development environment with Node.js, Git,
    * and the OpenCode AI agent. Optionally clone a Git repository into the workspace.
    *
+   * This method streams progress events and returns when the session is ready.
+   * Use the `onProgress` callback to show progress to users.
+   *
    * @param options - Session creation options
-   * @returns A new Session instance
+   * @returns A new Session instance (ready to use)
    *
    * @example
    * ```typescript
-   * // Empty workspace
-   * const session = await agent.createSession();
+   * // Empty workspace with progress updates
+   * const session = await tabbi.createSession({
+   *   onProgress: (event) => console.log(event.message)
+   * });
+   * // Session is ready - no need to call waitForReady()
    *
    * // With a repository
-   * const session = await agent.createSession({
+   * const session = await tabbi.createSession({
    *   repo: "owner/repo",
-   *   gitToken: "ghp_xxx" // for private repos
+   *   gitToken: "ghp_xxx", // for private repos
+   *   onProgress: (event) => console.log(event.message)
    * });
    * ```
    */
   async createSession(options: CreateSessionOptions = {}): Promise<Session> {
-    const response = await this.request<SessionInfo>("/v1/sessions", {
+    const response = await this.streamRequest("/v1/sessions", {
       method: "POST",
+      headers: {
+        Accept: "text/event-stream",
+      },
       body: JSON.stringify({
         repo: options.repo,
         gitToken: options.gitToken,
       }),
     });
 
-    return new Session(this, response);
+    if (!response.body) {
+      throw new TabbiError("STREAM_ERROR", "No response body from session creation");
+    }
+
+    // Process the SSE stream
+    return this.processSessionCreationStream(response.body, options.onProgress);
+  }
+
+  /**
+   * Process SSE stream for session creation.
+   * @internal
+   */
+  private async processSessionCreationStream(
+    body: ReadableStream<Uint8Array>,
+    onProgress?: (event: SessionProgressEvent) => void
+  ): Promise<Session> {
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let sessionId = "";
+    let createdAt = "";
+    let errorMessage = "";
+
+    const processLine = (line: string) => {
+      if (!line.startsWith("data: ")) return;
+
+      try {
+        const event = JSON.parse(line.slice(6)) as {
+          type: string;
+          data: Record<string, unknown>;
+          timestamp: string;
+        };
+
+        switch (event.type) {
+          case "session.created":
+            sessionId = event.data.id as string;
+            createdAt = event.timestamp;
+            if (onProgress) {
+              onProgress({ message: "Session created", timestamp: event.timestamp });
+            }
+            break;
+
+          case "session.progress":
+            if (onProgress) {
+              onProgress({
+                message: event.data.message as string,
+                timestamp: event.timestamp,
+              });
+            }
+            break;
+
+          case "session.ready":
+            // Session is ready - will exit the loop
+            break;
+
+          case "session.error":
+            errorMessage = event.data.message as string || "Session creation failed";
+            break;
+        }
+      } catch {
+        // Skip invalid JSON
+      }
+    };
+
+    // Read the stream
+    const reader = body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          processLine(line);
+        }
+      }
+
+      // Process remaining buffer
+      if (buffer.trim()) {
+        processLine(buffer);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    // Check for errors
+    if (errorMessage) {
+      throw new TabbiError("SANDBOX_CREATE_FAILED", errorMessage);
+    }
+
+    if (!sessionId) {
+      throw new TabbiError("SANDBOX_CREATE_FAILED", "No session ID received");
+    }
+
+    // Return a ready session
+    return new Session(this, {
+      id: sessionId,
+      status: "idle",
+      createdAt: createdAt || new Date().toISOString(),
+    });
   }
 
   /**

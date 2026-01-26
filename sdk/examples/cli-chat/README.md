@@ -47,10 +47,11 @@ npm start
 
 Creating a new session...
 
-Session created: e2e1091c-daa3-42de-ba3b-0d0a05e72fc1
-Waiting for sandbox to be ready...
-
-Session is ready!
+  Session created
+  Creating sandbox...
+  Sandbox ready, configuring session...
+Session is ready! (5.23s)
+  ID: e2e1091c-daa3-42de-ba3b-0d0a05e72fc1
 
 Type your messages to the agent. Commands:
   /files [path]  - List files in workspace
@@ -82,8 +83,8 @@ Session deleted successfully.
 
 ## How It Works
 
-1. Creates a new session with an isolated sandbox environment
-2. Waits for the sandbox to initialize
+1. Creates a new session using SSE streaming (shows real-time progress)
+2. Session is ready immediately when `createSession()` returns
 3. Sends user messages to the AI agent
 4. Streams responses in real-time, showing:
    - Assistant text responses

@@ -45,22 +45,34 @@ export declare class Tabbi {
      * The sandbox includes a full development environment with Node.js, Git,
      * and the OpenCode AI agent. Optionally clone a Git repository into the workspace.
      *
+     * This method streams progress events and returns when the session is ready.
+     * Use the `onProgress` callback to show progress to users.
+     *
      * @param options - Session creation options
-     * @returns A new Session instance
+     * @returns A new Session instance (ready to use)
      *
      * @example
      * ```typescript
-     * // Empty workspace
-     * const session = await agent.createSession();
+     * // Empty workspace with progress updates
+     * const session = await tabbi.createSession({
+     *   onProgress: (event) => console.log(event.message)
+     * });
+     * // Session is ready - no need to call waitForReady()
      *
      * // With a repository
-     * const session = await agent.createSession({
+     * const session = await tabbi.createSession({
      *   repo: "owner/repo",
-     *   gitToken: "ghp_xxx" // for private repos
+     *   gitToken: "ghp_xxx", // for private repos
+     *   onProgress: (event) => console.log(event.message)
      * });
      * ```
      */
     createSession(options?: CreateSessionOptions): Promise<Session>;
+    /**
+     * Process SSE stream for session creation.
+     * @internal
+     */
+    private processSessionCreationStream;
     /**
      * Get an existing session by ID.
      *

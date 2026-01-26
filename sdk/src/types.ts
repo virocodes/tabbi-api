@@ -74,6 +74,31 @@ export interface CreateSessionOptions {
    * Required if `repo` is a private repository.
    */
   gitToken?: string;
+
+  /**
+   * Callback function invoked for progress updates during session creation.
+   * Use this to show progress to users while the sandbox is being created.
+   *
+   * @example
+   * ```typescript
+   * const session = await tabbi.createSession({
+   *   onProgress: (event) => {
+   *     console.log(event.message); // "Creating sandbox...", etc.
+   *   }
+   * });
+   * ```
+   */
+  onProgress?: (event: SessionProgressEvent) => void;
+}
+
+/**
+ * Progress event during session creation
+ */
+export interface SessionProgressEvent {
+  /** Progress message */
+  message: string;
+  /** Event timestamp */
+  timestamp: string;
 }
 
 // ============================================================================

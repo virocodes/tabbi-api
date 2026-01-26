@@ -27,11 +27,19 @@ const sessions = new Hono<{ Bindings: Env }>();
 /**
  * POST /v1/sessions
  * Create a new session with sandbox
+ *
+ * Supports two modes:
+ * - JSON (default): Returns immediately with session info, client polls for ready
+ * - SSE (Accept: text/event-stream): Streams progress events until session is ready
  */
 sessions.post("/", async (c) => {
   const auth = c.get("auth");
   const requestId = c.get("requestId");
   const log = logger.child({ requestId, apiKeyId: auth.apiKeyId });
+
+  // Check if client wants SSE streaming
+  const acceptHeader = c.req.header("Accept") || "";
+  const wantSSE = acceptHeader.includes("text/event-stream");
 
   // Parse and validate request body
   let rawBody: unknown;
@@ -58,13 +66,56 @@ sessions.post("/", async (c) => {
 
   // Generate session ID
   const sessionId = uuidv4();
-  log.info("Creating session", { sessionId, repo: body.repo });
+  log.info("Creating session", { sessionId, repo: body.repo, streaming: wantSSE });
 
   // Get Durable Object stub
   const id = c.env.SESSION_AGENT.idFromName(sessionId);
   const stub = c.env.SESSION_AGENT.get(id);
 
-  // Initialize session
+  // Record in database using waitUntil for reliability
+  if (c.env.DATABASE_URL) {
+    const db = new DatabaseOperations(c.env.DATABASE_URL);
+    c.executionCtx.waitUntil(
+      db.recordSessionCreated(sessionId, auth.apiKeyId, sanitizeString(body.repo))
+        .catch((err) => log.error("Failed to record session", err))
+    );
+  }
+
+  // SSE mode: stream progress events
+  if (wantSSE) {
+    const initRequest = new Request("http://internal/initialize-stream", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Request-ID": requestId,
+      },
+      body: JSON.stringify({
+        sessionId,
+        apiKeyId: auth.apiKeyId,
+        userId: auth.userId,
+        repo: sanitizeString(body.repo),
+        gitToken: body.gitToken,
+        anthropicApiKey: c.env.ANTHROPIC_API_KEY,
+        sandboxServiceUrl: c.env.SANDBOX_SERVICE_URL,
+        sandboxServiceApiKey: c.env.SANDBOX_SERVICE_API_KEY,
+      }),
+    });
+
+    const streamResponse = await stub.fetch(initRequest);
+
+    log.info("Session creation streaming", { sessionId });
+    return new Response(streamResponse.body, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+        "X-Request-ID": requestId,
+      },
+    });
+  }
+
+  // JSON mode: return immediately, client polls for ready
   const initRequest = new Request("http://internal/initialize", {
     method: "POST",
     headers: {
@@ -92,15 +143,6 @@ sessions.post("/", async (c) => {
   }
 
   const state = await initResponse.json<SessionState>();
-
-  // Record in database using waitUntil for reliability
-  if (c.env.DATABASE_URL) {
-    const db = new DatabaseOperations(c.env.DATABASE_URL);
-    c.executionCtx.waitUntil(
-      db.recordSessionCreated(sessionId, auth.apiKeyId, sanitizeString(body.repo))
-        .catch((err) => log.error("Failed to record session", err))
-    );
-  }
 
   const response: CreateSessionResponse = {
     id: sessionId,

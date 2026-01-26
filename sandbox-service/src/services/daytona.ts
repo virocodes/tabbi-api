@@ -135,39 +135,78 @@ export class DaytonaSandboxService {
       await sandbox.process.executeCommand("mkdir -p /workspace");
     }
 
-    // Create OpenCode configuration
-    console.log("[daytona] Creating opencode.json configuration");
-    const opencodeConfig = JSON.stringify({
-      server: { port: 4096, hostname: "0.0.0.0" },
-    });
-    await sandbox.process.executeCommand(
-      `echo '${opencodeConfig}' > /workspace/opencode.json`
-    );
-
-    // Start OpenCode server with optional session ID
+    // Start OpenCode server, wait for it, and create session - all in one command
+    // This saves ~5 seconds by:
+    // 1. Polling locally (1ms vs 200ms over network)
+    // 2. Polling every 250ms (vs 2000ms)
+    // 3. Creating session inline (saves ~3s round trips)
     const sessionArg = params.opencodeSessionId
       ? `--session ${params.opencodeSessionId}`
       : "";
-    console.log("[daytona] Starting OpenCode server", {
+    console.log("[daytona] Starting OpenCode server with inline session creation", {
       sessionId: params.opencodeSessionId || "new",
     });
 
-    await sandbox.process.executeCommand(
-      `cd /workspace && nohup opencode ${sessionArg} serve --port 4096 --hostname 0.0.0.0 > /tmp/opencode.log 2>&1 < /dev/null & echo "started"`,
+    const startupScript = `
+cd /workspace
+
+# Create OpenCode configuration
+echo '{"server":{"port":4096,"hostname":"0.0.0.0"}}' > opencode.json
+
+# Start OpenCode server in background
+nohup opencode ${sessionArg} serve --port 4096 --hostname 0.0.0.0 > /tmp/opencode.log 2>&1 &
+
+# Poll locally until ready (fast - localhost is ~1ms vs ~200ms over network)
+# Use HTTP status code check (more reliable than parsing response body)
+for i in $(seq 1 60); do
+  STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4096/global/health 2>/dev/null || echo "000")
+  if [ "$STATUS" = "200" ]; then
+    # Create session via localhost (saves ~3s of round trips through proxy)
+    # Parse JSON with grep/sed (jq not available in sandbox)
+    RESPONSE=$(curl -s -X POST http://localhost:4096/session \
+      -H "Content-Type: application/json" \
+      -d '{"title":"api-session"}')
+    SESSION=$(echo "$RESPONSE" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+    if [ -n "$SESSION" ]; then
+      echo "ready:$SESSION"
+      exit 0
+    fi
+    # If session creation failed, still report ready but with no session
+    echo "ready:NONE"
+    exit 0
+  fi
+  sleep 0.25
+done
+
+# Timeout - get diagnostics
+echo "timeout"
+cat /tmp/opencode.log 2>&1 | tail -20
+exit 1
+`;
+
+    const result = await sandbox.process.executeCommand(
+      startupScript,
       undefined, // cwd
       undefined, // env
-      10 // timeout
+      30 // timeout in seconds
     );
 
-    // Wait for server to start
-    console.log("[daytona] Waiting for OpenCode server to start");
-    const healthResult = await this.waitForOpenCode(sandbox);
-    if (!healthResult.healthy) {
+    // Parse result
+    const output = result.result || "";
+    const match = output.match(/ready:(.+)/);
+
+    if (!match) {
+      // Get diagnostic info
+      const logResult = await sandbox.process.executeCommand(
+        "cat /tmp/opencode.log 2>&1 | tail -30 || echo '[no logs]'"
+      );
       await this.terminateSandbox(sandbox.id);
       throw new Error(
-        `OpenCode server failed to start: ${healthResult.error}`
+        `OpenCode server failed to start. Output: ${output.slice(0, 200)}. Logs: ${logResult.result?.slice(0, 300) || "empty"}`
       );
     }
+
+    const opencodeSessionId = match[1] === "NONE" ? undefined : match[1];
 
     // Get preview URL for port 4096
     const previewLink = await sandbox.getPreviewLink(4096);
@@ -176,13 +215,14 @@ export class DaytonaSandboxService {
     console.log("[daytona] Sandbox ready", {
       sandboxId: sandbox.id,
       previewUrl,
+      opencodeSessionId,
       durationMs: Date.now() - startTime,
     });
 
     return {
       sandboxId: sandbox.id,
       previewUrl,
-      opencodeSessionId: params.opencodeSessionId,
+      opencodeSessionId,
     };
   }
 
@@ -219,26 +259,51 @@ export class DaytonaSandboxService {
       `export ANTHROPIC_API_KEY="${anthropicApiKey}"`
     );
 
-    // Restart OpenCode server with session ID to restore conversation
+    // Restart OpenCode server with session ID and poll locally until ready
     const sessionArg = opencodeSessionId
       ? `--session ${opencodeSessionId}`
       : "";
-    console.log("[daytona] Restarting OpenCode server", {
+    console.log("[daytona] Restarting OpenCode server with local polling", {
       sessionId: opencodeSessionId || "new",
     });
 
-    await sandbox.process.executeCommand(
-      `cd /workspace && nohup opencode ${sessionArg} serve --port 4096 --hostname 0.0.0.0 > /tmp/opencode.log 2>&1 < /dev/null & echo "started"`,
+    const startupScript = `
+cd /workspace
+
+# Start OpenCode server in background
+nohup opencode ${sessionArg} serve --port 4096 --hostname 0.0.0.0 > /tmp/opencode.log 2>&1 &
+
+# Poll locally until ready (fast - localhost is ~1ms vs ~200ms over network)
+# Use HTTP status code check (more reliable than parsing response body)
+for i in $(seq 1 60); do
+  STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4096/global/health 2>/dev/null || echo "000")
+  if [ "$STATUS" = "200" ]; then
+    echo "ready"
+    exit 0
+  fi
+  sleep 0.25
+done
+
+# Timeout - get diagnostics
+echo "timeout"
+cat /tmp/opencode.log 2>&1 | tail -20
+exit 1
+`;
+
+    const result = await sandbox.process.executeCommand(
+      startupScript,
       undefined, // cwd
       undefined, // env
-      10 // timeout
+      30 // timeout in seconds
     );
 
-    // Wait for server to start
-    const healthResult = await this.waitForOpenCode(sandbox);
-    if (!healthResult.healthy) {
+    if (!result.result?.includes("ready")) {
+      // Get diagnostic info
+      const logResult = await sandbox.process.executeCommand(
+        "cat /tmp/opencode.log 2>&1 | tail -30 || echo '[no logs]'"
+      );
       throw new Error(
-        `OpenCode server failed to start: ${healthResult.error}`
+        `OpenCode server failed to start. Output: ${result.result?.slice(0, 200) || "empty"}. Logs: ${logResult.result?.slice(0, 300) || "empty"}`
       );
     }
 
@@ -417,61 +482,4 @@ export class DaytonaSandboxService {
     }
   }
 
-  /**
-   * Wait for OpenCode server to be ready
-   */
-  private async waitForOpenCode(
-    sandbox: Sandbox
-  ): Promise<{ healthy: boolean; error?: string }> {
-    const maxAttempts = 30;
-    const delayMs = 2000;
-
-    for (let i = 0; i < maxAttempts; i++) {
-      try {
-        const result = await sandbox.process.executeCommand(
-          "curl -s -o /dev/null -w '%{http_code}' http://localhost:4096/global/health"
-        );
-
-        const statusCode = result.result?.trim();
-        if (statusCode === "200") {
-          console.log("[daytona] OpenCode server ready", { attempt: i + 1 });
-          return { healthy: true };
-        }
-
-        console.log("[daytona] Waiting for OpenCode", {
-          attempt: i + 1,
-          statusCode,
-        });
-      } catch (e) {
-        console.log("[daytona] Health check error", { attempt: i + 1, error: e });
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-
-    // Get logs and diagnostic info for debugging
-    try {
-      const logResult = await sandbox.process.executeCommand(
-        "cat /tmp/opencode.log 2>&1 || echo '[log file not found]'"
-      );
-
-      const psResult = await sandbox.process.executeCommand(
-        "ps aux | grep opencode | grep -v grep || echo '[no opencode process]'"
-      );
-
-      const portResult = await sandbox.process.executeCommand(
-        "netstat -tlnp 2>/dev/null | grep 4096 || ss -tlnp | grep 4096 || echo '[nothing on port 4096]'"
-      );
-
-      return {
-        healthy: false,
-        error: `Timeout waiting for OpenCode. Logs: ${logResult.result?.slice(0, 300) || "empty"} | Process: ${psResult.result?.slice(0, 100) || "none"} | Port: ${portResult.result?.slice(0, 100) || "not listening"}`,
-      };
-    } catch {
-      return {
-        healthy: false,
-        error: "Timeout waiting for OpenCode - could not retrieve diagnostics",
-      };
-    }
-  }
 }

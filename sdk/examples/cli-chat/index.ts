@@ -53,16 +53,18 @@ async function main() {
   log("cyan", "\n=== Tabbi CLI Chat ===\n");
   log("dim", "Creating a new session...\n");
 
-  // Create a session
+  // Create a session with SSE streaming (no polling needed)
   let session;
   try {
-    session = await tabbi.createSession();
-    log("green", `Session created: ${session.id}`);
-    log("dim", "Waiting for sandbox to be ready...\n");
-
-    // Wait for the session to be ready
-    await session.waitForReady(120000);
-    log("green", "Session is ready!\n");
+    const startTime = Date.now();
+    session = await tabbi.createSession({
+      onProgress: (event) => {
+        log("dim", `  ${event.message}`);
+      },
+    });
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+    log("green", `Session is ready! (${elapsed}s)`);
+    log("dim", `  ID: ${session.id}\n`);
   } catch (error) {
     if (error instanceof TabbiError) {
       log("red", `Failed to create session: ${error.code} - ${error.message}`);

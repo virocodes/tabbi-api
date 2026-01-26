@@ -18,8 +18,13 @@ const tabbi = new Tabbi({
   apiKey: "tb_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 });
 
-// Create a session
-const session = await tabbi.createSession();
+// Create a session (streams progress, returns when ready)
+const session = await tabbi.createSession({
+  onProgress: (event) => console.log(event.message)
+});
+// Output: "Session created", "Creating sandbox...", "Sandbox ready, configuring session..."
+
+// Session is immediately ready - no need to call waitForReady()!
 
 // Send a message and stream the response
 const message = await session.sendMessage("Create a hello world app", {
@@ -60,16 +65,37 @@ new Tabbi(config: TabbiConfig)
 
 ##### `createSession(options?)`
 
-Create a new session with an isolated sandbox environment.
+Create a new session with an isolated sandbox environment. Uses SSE streaming to report progress and returns when the session is ready.
 
 ```typescript
 const session = await tabbi.createSession({
   repo: "owner/repo",        // Optional: Git repository to clone
-  gitToken: "ghp_xxx"        // Optional: Token for private repos
+  gitToken: "ghp_xxx",       // Optional: Token for private repos
+  onProgress: (event) => {   // Optional: Progress callback
+    console.log(event.message);
+  }
 });
+// Session is ready to use immediately - no need to call waitForReady()
 ```
 
-**Returns:** `Promise<Session>`
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `options.repo` | `string` | No | Git repository to clone (`owner/repo` format) |
+| `options.gitToken` | `string` | No | GitHub token for private repositories |
+| `options.onProgress` | `(event: SessionProgressEvent) => void` | No | Callback for progress updates |
+
+**Progress Events:**
+
+```typescript
+interface SessionProgressEvent {
+  message: string;    // e.g., "Creating sandbox...", "Sandbox ready, configuring session..."
+  timestamp: string;  // ISO 8601 timestamp
+}
+```
+
+**Returns:** `Promise<Session>` (session is ready to use)
 
 ##### `getSession(id)`
 
@@ -171,11 +197,15 @@ await session.delete();
 
 **Returns:** `Promise<void>`
 
-##### `waitForReady(timeoutMs?)`
+##### `waitForReady(timeoutMs?)` *(deprecated)*
 
 Wait for the session to be ready (status changes from `starting`).
 
+> **Note:** This method is no longer needed when using `createSession()`, which now streams progress and returns only when the session is ready. This method is kept for backwards compatibility with sessions retrieved via `getSession()`.
+
 ```typescript
+// Only needed if using getSession() to restore a session that may still be starting
+const session = tabbi.getSession(existingSessionId);
 await session.waitForReady(60000); // Wait up to 60 seconds
 ```
 
@@ -305,24 +335,25 @@ import { Tabbi } from "@tabbi/sdk";
 const tabbi = new Tabbi({ apiKey: process.env.TABBI_API_KEY! });
 
 async function main() {
-  const session = await tabbi.createSession();
+  // Create session with progress updates
+  const session = await tabbi.createSession({
+    onProgress: (event) => console.log(event.message)
+  });
+  // Session is ready immediately - no waitForReady() needed!
 
   try {
-    // Wait for sandbox to be ready
-    await session.waitForReady();
-
     // Send a coding task
     await session.sendMessage("Create a TypeScript function that calculates fibonacci numbers", {
       onEvent: (e) => {
-        if (e.type === "message.assistant" && !e.data.isPartial) {
-          console.log("Assistant:", e.data.content);
+        if (e.type === "message.assistant") {
+          process.stdout.write(e.data.content);
         }
       }
     });
 
     // Get the created file
     const files = await session.listFiles("/");
-    console.log("Files:", files);
+    console.log("\nFiles:", files);
 
   } finally {
     await session.delete();
@@ -405,7 +436,7 @@ try {
 ## Best Practices
 
 1. **Always delete sessions** when done to free up resources
-2. **Use `waitForReady()`** after creating a session before sending messages
+2. **Use `onProgress` callback** to show users real-time progress during session creation
 3. **Handle `SESSION_BUSY` errors** - wait and retry if the session is processing
 4. **Stream events** to provide real-time feedback to users
 5. **Set appropriate timeouts** for long-running tasks
