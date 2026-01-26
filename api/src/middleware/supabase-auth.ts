@@ -95,6 +95,18 @@ export const supabaseAuthMiddleware: MiddlewareHandler<{ Bindings: Env }> = asyn
     return c.json(error, 401);
   }
 
+  // Verify Supabase is configured
+  if (!c.env.SUPABASE_URL || !c.env.SUPABASE_SERVICE_KEY) {
+    log.error("Supabase not configured");
+    const error: APIError = {
+      error: {
+        code: "CONFIGURATION_ERROR",
+        message: "Authentication service not configured",
+      },
+    };
+    return c.json(error, 500);
+  }
+
   // Hash and validate against Supabase
   const keyHash = await hashApiKey(apiKey);
   const keyData = await validateApiKey(

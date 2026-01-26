@@ -20,7 +20,7 @@ import {
   isValidUUID,
   sanitizeString,
 } from "../utils/validation";
-import { ModalClient } from "../services/modal";
+import { SandboxProxyClient } from "../services/sandbox-proxy";
 
 const sessions = new Hono<{ Bindings: Env }>();
 
@@ -78,9 +78,8 @@ sessions.post("/", async (c) => {
       repo: sanitizeString(body.repo),
       gitToken: body.gitToken,
       anthropicApiKey: c.env.ANTHROPIC_API_KEY,
-      modalApiUrl: c.env.MODAL_API_URL,
-      modalApiSecret: c.env.MODAL_API_SECRET,
-      modalEnvironment: c.env.MODAL_ENVIRONMENT || "dev",
+      sandboxServiceUrl: c.env.SANDBOX_SERVICE_URL,
+      sandboxServiceApiKey: c.env.SANDBOX_SERVICE_API_KEY,
     }),
   });
 
@@ -95,11 +94,13 @@ sessions.post("/", async (c) => {
   const state = await initResponse.json<SessionState>();
 
   // Record in database using waitUntil for reliability
-  const db = new DatabaseOperations(c.env.DATABASE_URL);
-  c.executionCtx.waitUntil(
-    db.recordSessionCreated(sessionId, auth.apiKeyId, sanitizeString(body.repo))
-      .catch((err) => log.error("Failed to record session", err))
-  );
+  if (c.env.DATABASE_URL) {
+    const db = new DatabaseOperations(c.env.DATABASE_URL);
+    c.executionCtx.waitUntil(
+      db.recordSessionCreated(sessionId, auth.apiKeyId, sanitizeString(body.repo))
+        .catch((err) => log.error("Failed to record session", err))
+    );
+  }
 
   const response: CreateSessionResponse = {
     id: sessionId,
@@ -234,10 +235,6 @@ sessions.post("/:id/messages", async (c) => {
     },
     body: JSON.stringify({
       content: body.content,
-      anthropicApiKey: c.env.ANTHROPIC_API_KEY,
-      modalApiUrl: c.env.MODAL_API_URL,
-      modalApiSecret: c.env.MODAL_API_SECRET,
-      modalEnvironment: c.env.MODAL_ENVIRONMENT || "dev",
     }),
   });
 
@@ -250,11 +247,13 @@ sessions.post("/:id/messages", async (c) => {
   }
 
   // Record usage using waitUntil
-  const db = new DatabaseOperations(c.env.DATABASE_URL);
-  c.executionCtx.waitUntil(
-    db.recordMessageSent(sessionId, auth.apiKeyId)
-      .catch((err) => log.error("Failed to record message", err))
-  );
+  if (c.env.DATABASE_URL) {
+    const db = new DatabaseOperations(c.env.DATABASE_URL);
+    c.executionCtx.waitUntil(
+      db.recordMessageSent(sessionId, auth.apiKeyId)
+        .catch((err) => log.error("Failed to record message", err))
+    );
+  }
 
   // Return SSE stream with headers to prevent buffering
   return new Response(streamResponse.body, {
@@ -308,9 +307,6 @@ sessions.get("/:id/files/*", async (c) => {
     {
       method: "GET",
       headers: {
-        "X-Modal-Url": c.env.MODAL_API_URL,
-        "X-Modal-Secret": c.env.MODAL_API_SECRET,
-        "X-Modal-Environment": c.env.MODAL_ENVIRONMENT || "dev",
         "X-Request-ID": requestId,
       },
     }
@@ -401,16 +397,15 @@ sessions.get("/:id/logs", async (c) => {
     );
   }
 
-  // Fetch logs from Modal
-  const modal = new ModalClient({
-    baseUrl: c.env.MODAL_API_URL,
-    apiSecret: c.env.MODAL_API_SECRET,
-    environment: (c.env.MODAL_ENVIRONMENT as "dev" | "prod") || "dev",
-  });
+  // Fetch logs from sandbox service
+  const proxy = new SandboxProxyClient(
+    c.env.SANDBOX_SERVICE_URL,
+    c.env.SANDBOX_SERVICE_API_KEY
+  );
 
   try {
     const tail = parseInt(c.req.query("tail") || "100", 10);
-    const result = await modal.getLogs(sandboxId, tail);
+    const result = await proxy.getLogs(sandboxId, tail);
     return c.json(result);
   } catch (error) {
     log.error("Failed to fetch logs", error);
@@ -463,9 +458,6 @@ sessions.delete("/:id", async (c) => {
   const terminateRequest = new Request("http://internal/terminate", {
     method: "POST",
     headers: {
-      "X-Modal-Url": c.env.MODAL_API_URL,
-      "X-Modal-Secret": c.env.MODAL_API_SECRET,
-      "X-Modal-Environment": c.env.MODAL_ENVIRONMENT || "dev",
       "X-Request-ID": requestId,
     },
   });
@@ -479,11 +471,13 @@ sessions.delete("/:id", async (c) => {
   }
 
   // Record termination using waitUntil
-  const db = new DatabaseOperations(c.env.DATABASE_URL);
-  c.executionCtx.waitUntil(
-    db.recordSessionTerminated(sessionId)
-      .catch((err) => log.error("Failed to record termination", err))
-  );
+  if (c.env.DATABASE_URL) {
+    const db = new DatabaseOperations(c.env.DATABASE_URL);
+    c.executionCtx.waitUntil(
+      db.recordSessionTerminated(sessionId)
+        .catch((err) => log.error("Failed to record termination", err))
+    );
+  }
 
   log.info("Session terminated");
   return c.json({ status: "terminated" });

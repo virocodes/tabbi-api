@@ -168,10 +168,9 @@ export interface Env {
   // Durable Object bindings
   SESSION_AGENT: DurableObjectNamespace;
 
-  // Modal sandbox
-  MODAL_API_URL: string;
-  MODAL_API_SECRET?: string;
-  MODAL_ENVIRONMENT?: "dev" | "prod";
+  // Sandbox Service (Node.js service for Daytona/OpenCode SDK operations)
+  SANDBOX_SERVICE_URL: string;
+  SANDBOX_SERVICE_API_KEY: string;
 
   // AI
   ANTHROPIC_API_KEY: string;

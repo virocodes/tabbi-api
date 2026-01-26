@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240512.0",
+    "@daytonaio/sdk": "^0.134.0",
     "@types/uuid": "^9.0.8",
     "typescript": "^5.4.5",
     "wrangler": "^3.57.0"

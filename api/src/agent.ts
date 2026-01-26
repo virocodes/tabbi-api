@@ -6,8 +6,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { v4 as uuidv4 } from "uuid";
 import type { SessionState, Message, APIError, FileInfo, Env } from "./types";
-import { ModalClient } from "./services/modal";
-import { OpenCodeClient } from "./services/opencode";
+import { SandboxProxyClient } from "./services/sandbox-proxy";
 import { logger, Logger } from "./utils/logger";
 
 // SQLite schema for session state
@@ -29,9 +28,8 @@ const SCHEMA = `
 // Configuration stored once during initialization
 interface SessionConfig {
   anthropicApiKey: string;
-  modalApiUrl: string;
-  modalApiSecret: string;
-  modalEnvironment: "dev" | "prod";
+  sandboxServiceUrl: string;
+  sandboxServiceApiKey: string;
 }
 
 export class SessionAgent extends DurableObject {
@@ -189,9 +187,8 @@ export class SessionAgent extends DurableObject {
       repo?: string;
       gitToken?: string;
       anthropicApiKey: string;
-      modalApiUrl: string;
-      modalApiSecret: string;
-      modalEnvironment?: "dev" | "prod";
+      sandboxServiceUrl: string;
+      sandboxServiceApiKey: string;
     }>();
 
     this.log = this.log.child({ sessionId: body.sessionId });
@@ -206,9 +203,8 @@ export class SessionAgent extends DurableObject {
     // Store configuration securely (not passed in every request)
     const config: SessionConfig = {
       anthropicApiKey: body.anthropicApiKey,
-      modalApiUrl: body.modalApiUrl,
-      modalApiSecret: body.modalApiSecret,
-      modalEnvironment: body.modalEnvironment || "dev",
+      sandboxServiceUrl: body.sandboxServiceUrl,
+      sandboxServiceApiKey: body.sandboxServiceApiKey,
     };
     await this.setConfig(config);
 
@@ -250,22 +246,27 @@ export class SessionAgent extends DurableObject {
   }
 
   /**
-   * Create sandbox asynchronously
+   * Create sandbox asynchronously via sandbox service
    */
   private async createSandbox(
     config: SessionConfig,
     repo?: string,
-    gitToken?: string
+    gitToken?: string,
+    existingOpencodeSessionId?: string
   ): Promise<void> {
-    const modal = new ModalClient({
-      baseUrl: config.modalApiUrl,
-      apiSecret: config.modalApiSecret,
-      environment: config.modalEnvironment,
-    });
+    const proxy = new SandboxProxyClient(
+      config.sandboxServiceUrl,
+      config.sandboxServiceApiKey
+    );
 
     try {
-      this.log.info("Creating Modal sandbox");
-      const result = await modal.createSandbox(config.anthropicApiKey, repo, gitToken);
+      this.log.info("Creating sandbox via sandbox service");
+      const result = await proxy.createSandbox({
+        anthropicApiKey: config.anthropicApiKey,
+        repo,
+        gitToken,
+        opencodeSessionId: existingOpencodeSessionId,
+      });
 
       const state = await this.getState();
       if (!state) {
@@ -273,17 +274,16 @@ export class SessionAgent extends DurableObject {
         return;
       }
 
-      state.sandboxId = result.sandbox_id;
-      state.sandboxUrl = result.tunnel_url;
+      state.sandboxId = result.sandboxId;
+      state.sandboxUrl = result.previewUrl;
       state.lastActivityAt = new Date().toISOString();
 
       this.log.info("Sandbox created, initializing OpenCode session", {
-        sandboxId: result.sandbox_id,
+        sandboxId: result.sandboxId,
       });
 
-      // Initialize OpenCode session
-      const opencode = new OpenCodeClient(result.tunnel_url);
-      const session = await opencode.getOrCreateSession();
+      // Initialize OpenCode session via proxy
+      const session = await proxy.getOrCreateSession(result.previewUrl);
       state.opencodeSessionId = session.id;
       state.status = "idle";
 
@@ -306,10 +306,6 @@ export class SessionAgent extends DurableObject {
   private async handlePromptStream(request: Request): Promise<Response> {
     const body = await request.json<{
       content: string;
-      anthropicApiKey?: string;
-      modalApiUrl?: string;
-      modalApiSecret?: string;
-      modalEnvironment?: string;
     }>();
 
     const state = await this.getState();
@@ -357,27 +353,28 @@ export class SessionAgent extends DurableObject {
       return Response.json(error, { status: 409 });
     }
 
-    // Auto-resume if paused
-    if (state.status === "paused" && state.snapshotId) {
+    const proxy = new SandboxProxyClient(
+      config.sandboxServiceUrl,
+      config.sandboxServiceApiKey
+    );
+
+    // Auto-resume if paused (Daytona uses same sandboxId, preserves filesystem)
+    if (state.status === "paused" && state.sandboxId) {
       this.log.info("Auto-resuming paused session");
       state.status = "starting";
       state.isProcessing = true;
       await this.setState(state);
 
-      const modal = new ModalClient({
-        baseUrl: config.modalApiUrl,
-        apiSecret: config.modalApiSecret,
-        environment: config.modalEnvironment,
-      });
-
       try {
-        const result = await modal.resumeSandbox(state.snapshotId, config.anthropicApiKey);
-        state.sandboxId = result.sandbox_id;
-        state.sandboxUrl = result.tunnel_url;
-        state.snapshotId = null;
+        // Pass opencodeSessionId to resume the same conversation
+        const result = await proxy.resumeSandbox(
+          state.sandboxId,
+          config.anthropicApiKey,
+          state.opencodeSessionId || undefined
+        );
+        state.sandboxUrl = result.previewUrl;
 
-        const opencode = new OpenCodeClient(result.tunnel_url);
-        const session = await opencode.getOrCreateSession();
+        const session = await proxy.getOrCreateSession(result.previewUrl);
         state.opencodeSessionId = session.id;
         state.status = "running";
         await this.setState(state);
@@ -457,13 +454,18 @@ export class SessionAgent extends DurableObject {
           // Release the lock so pipeTo() can use the writable
           initialWriter.releaseLock();
 
-          // Get OpenCode stream
-          this.log.info("Connecting to OpenCode");
-          const opencode = new OpenCodeClient(state.sandboxUrl!);
-          const stream = await opencode.sendMessage(state.opencodeSessionId!, body.content);
+          // Get streaming response from sandbox service
+          this.log.info("Connecting to sandbox service for streaming");
+          const streamResponse = await proxy.sendMessageStream(
+            state.sandboxUrl!,
+            state.opencodeSessionId!,
+            body.content
+          );
 
-          // Pipe directly for real-time streaming
-          await stream.pipeTo(writable, { preventClose: true });
+          // Pipe response body directly to client - zero buffering
+          if (streamResponse.body) {
+            await streamResponse.body.pipeTo(writable, { preventClose: true });
+          }
 
           this.log.info("Stream completed", { durationMs: Date.now() - streamingStartTime });
 
@@ -549,11 +551,10 @@ export class SessionAgent extends DurableObject {
       return Response.json(error, { status: 500 });
     }
 
-    const modal = new ModalClient({
-      baseUrl: config.modalApiUrl,
-      apiSecret: config.modalApiSecret,
-      environment: config.modalEnvironment,
-    });
+    const proxy = new SandboxProxyClient(
+      config.sandboxServiceUrl,
+      config.sandboxServiceApiKey
+    );
 
     const url = new URL(request.url);
     const isListing = url.searchParams.get("list") === "true";
@@ -561,16 +562,16 @@ export class SessionAgent extends DurableObject {
     if (isListing) {
       try {
         const workspacePath = `/workspace${path}`.replace(/\/+$/, "") || "/workspace";
-        const result = await modal.listFiles(state.sandboxId, workspacePath);
+        const files = await proxy.listFiles(state.sandboxId, workspacePath);
 
-        const files: FileInfo[] = (result.files ?? []).map((f) => ({
+        const mappedFiles: FileInfo[] = files.map((f) => ({
           name: f.name,
           path: f.path,
-          isDirectory: f.is_directory,
+          isDirectory: f.isDirectory,
           size: f.size,
         }));
 
-        return Response.json({ files });
+        return Response.json({ files: mappedFiles });
       } catch (error) {
         this.log.error("Failed to list files", error);
         const apiError: APIError = {
@@ -584,16 +585,16 @@ export class SessionAgent extends DurableObject {
     } else {
       try {
         const filePath = `/workspace${path}`;
-        const result = await modal.readFile(state.sandboxId, filePath);
+        const content = await proxy.readFile(state.sandboxId, filePath);
 
-        return new Response(result.content, {
+        return new Response(content, {
           headers: {
             "Content-Type": "text/plain; charset=utf-8",
           },
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
-        if (message.includes("404") || message.includes("not found")) {
+        if (message.includes("404") || message.includes("not found") || message.includes("FILE_NOT_FOUND")) {
           const apiError: APIError = {
             error: {
               code: "FILE_NOT_FOUND",
@@ -618,7 +619,7 @@ export class SessionAgent extends DurableObject {
   /**
    * Handle session termination
    */
-  private async handleTerminate(request: Request): Promise<Response> {
+  private async handleTerminate(_request: Request): Promise<Response> {
     const state = await this.getState();
     if (!state) {
       return Response.json({ status: "not_found" }, { status: 404 });
@@ -627,14 +628,13 @@ export class SessionAgent extends DurableObject {
     const config = await this.getConfig();
 
     if (state.sandboxId && config) {
-      const modal = new ModalClient({
-        baseUrl: config.modalApiUrl,
-        apiSecret: config.modalApiSecret,
-        environment: config.modalEnvironment,
-      });
+      const proxy = new SandboxProxyClient(
+        config.sandboxServiceUrl,
+        config.sandboxServiceApiKey
+      );
 
       try {
-        await modal.terminateSandbox(state.sandboxId);
+        await proxy.terminateSandbox(state.sandboxId);
         this.log.info("Sandbox terminated", { sandboxId: state.sandboxId });
       } catch (error) {
         this.log.error("Failed to terminate sandbox", error);

@@ -1,13 +1,15 @@
-name = "agent-api"
+name = "tabbi-api"
 main = "src/index.ts"
 compatibility_date = "2024-05-12"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-MODAL_API_URL = "https://your-workspace--agent-sandbox.modal.run"
+# Non-secret configuration
+# SANDBOX_SERVICE_URL is set via wrangler secret for flexibility
 
 # Secrets (set via wrangler secret put)
-# MODAL_API_SECRET
+# SANDBOX_SERVICE_URL
+# SANDBOX_SERVICE_API_KEY
 # DATABASE_URL
 # UPSTASH_REDIS_URL
 # UPSTASH_REDIS_TOKEN

@@ -1,29 +1,18 @@
 /**
- * OpenCode Client
- * Communicates with OpenCode server running in Modal sandbox
+ * OpenCode Service
+ * Communicates with OpenCode server running in sandboxes
  */
 
-import { logger } from "../utils/logger";
+import type { OpenCodeSession } from "../types";
 
-export interface OpenCodeSession {
-  id: string;
-  title?: string;
-}
-
-export class OpenCodeClient {
-  private baseUrl: string;
-  private log = logger.child({ service: "opencode" });
-
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl.replace(/\/$/, "");
-  }
-
+export class OpenCodeService {
   /**
    * Health check
    */
-  async health(): Promise<boolean> {
+  async health(baseUrl: string): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/global/health`);
+      const url = this.normalizeUrl(baseUrl);
+      const response = await fetch(`${url}/global/health`);
       if (!response.ok) return false;
       const data = (await response.json()) as { healthy?: boolean };
       return data.healthy ?? false;
@@ -35,8 +24,9 @@ export class OpenCodeClient {
   /**
    * List existing sessions
    */
-  async listSessions(): Promise<OpenCodeSession[]> {
-    const response = await fetch(`${this.baseUrl}/session`);
+  async listSessions(baseUrl: string): Promise<OpenCodeSession[]> {
+    const url = this.normalizeUrl(baseUrl);
+    const response = await fetch(`${url}/session`);
 
     if (!response.ok) {
       throw new Error(`Failed to list sessions: ${response.status}`);
@@ -47,9 +37,7 @@ export class OpenCodeClient {
       | { data?: Array<{ id: string; title?: string }> };
 
     // Handle both formats: { data: [...] } or direct array
-    const sessions = Array.isArray(result)
-      ? result
-      : (result.data ?? []);
+    const sessions = Array.isArray(result) ? result : (result.data ?? []);
 
     return sessions.map((s) => ({
       id: s.id,
@@ -60,8 +48,9 @@ export class OpenCodeClient {
   /**
    * Create a new session
    */
-  async createSession(title?: string): Promise<OpenCodeSession> {
-    const response = await fetch(`${this.baseUrl}/session`, {
+  async createSession(baseUrl: string, title?: string): Promise<OpenCodeSession> {
+    const url = this.normalizeUrl(baseUrl);
+    const response = await fetch(`${url}/session`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -91,42 +80,43 @@ export class OpenCodeClient {
   /**
    * Get or create a session
    */
-  async getOrCreateSession(): Promise<OpenCodeSession> {
-    const sessions = await this.listSessions();
+  async getOrCreateSession(baseUrl: string): Promise<OpenCodeSession> {
+    const sessions = await this.listSessions(baseUrl);
     if (sessions.length > 0) {
       return sessions[0];
     }
-    return this.createSession();
+    return this.createSession(baseUrl);
   }
 
   /**
-   * Send a prompt to a session and stream the response
-   * Uses POST /session/{id}/message endpoint
+   * Send a message to a session and return streaming response
    *
    * IMPORTANT: Subscribe to events FIRST, then send the message.
    * OpenCode's /message endpoint blocks until processing completes.
    * If we POST first, we miss all the streaming events!
    */
   async sendMessage(
+    baseUrl: string,
     sessionId: string,
     content: string
   ): Promise<ReadableStream<Uint8Array>> {
+    const url = this.normalizeUrl(baseUrl);
     const startTime = Date.now();
 
     // Subscribe to events FIRST - before sending the message
-    this.log.info("Connecting to event stream", { sessionId });
+    console.log("[opencode] Connecting to event stream", { sessionId });
     const eventStreamStart = Date.now();
-    const eventStream = await this.createEventStream();
-    this.log.info("Event stream connected", {
+    const eventStream = await this.createEventStream(url);
+    console.log("[opencode] Event stream connected", {
       sessionId,
       durationMs: Date.now() - eventStreamStart,
     });
 
     // NOW send the message - fire and forget, don't await the response
-    const url = `${this.baseUrl}/session/${sessionId}/message`;
+    const messageUrl = `${url}/session/${sessionId}/message`;
 
     // Fire and forget - don't await, just send
-    fetch(url, {
+    fetch(messageUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -136,19 +126,20 @@ export class OpenCodeClient {
       }),
     })
       .then((response) => {
-        this.log.info("Message POST completed", {
+        console.log("[opencode] Message POST completed", {
           sessionId,
           status: response.status,
           durationMs: Date.now() - startTime,
         });
         if (!response.ok) {
-          this.log.error("Message POST failed", new Error(`Status: ${response.status}`), {
+          console.error("[opencode] Message POST failed", {
             sessionId,
+            status: response.status,
           });
         }
       })
       .catch((error) => {
-        this.log.error("Message POST error", error, { sessionId });
+        console.error("[opencode] Message POST error", { sessionId, error });
       });
 
     return eventStream;
@@ -157,11 +148,11 @@ export class OpenCodeClient {
   /**
    * Create event stream from OpenCode SSE endpoint
    */
-  private async createEventStream(): Promise<ReadableStream<Uint8Array>> {
-    const url = `${this.baseUrl}/event`;
+  private async createEventStream(baseUrl: string): Promise<ReadableStream<Uint8Array>> {
+    const url = `${baseUrl}/event`;
     const fetchStart = Date.now();
     const response = await fetch(url);
-    this.log.debug("Event stream fetch completed", {
+    console.log("[opencode] Event stream fetch completed", {
       durationMs: Date.now() - fetchStart,
       status: response.status,
     });
@@ -176,7 +167,6 @@ export class OpenCodeClient {
     let receivedServerConnected = false;
     let firstChunkReceived = false;
     const streamStartTime = Date.now();
-    const log = this.log;
 
     return new ReadableStream({
       async start(controller) {
@@ -190,7 +180,7 @@ export class OpenCodeClient {
 
             if (!firstChunkReceived) {
               firstChunkReceived = true;
-              log.debug("First chunk received", {
+              console.log("[opencode] First chunk received", {
                 durationMs: Date.now() - streamStartTime,
               });
             }
@@ -257,6 +247,13 @@ export class OpenCodeClient {
         }
       },
     });
+  }
+
+  /**
+   * Normalize base URL (remove trailing slash)
+   */
+  private normalizeUrl(baseUrl: string): string {
+    return baseUrl.replace(/\/$/, "");
   }
 }
 
@@ -394,3 +391,6 @@ function transformOpenCodeEvent(
       return null;
   }
 }
+
+// Create singleton instance
+export const opencodeService = new OpenCodeService();
