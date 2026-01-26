@@ -1,5 +1,6 @@
--- Agent API Schema for Supabase
--- Run this in Supabase SQL Editor
+-- Migration: 001_initial_schema
+-- Date: 2025-01-25
+-- Description: Initial database schema for Tabbi API
 
 -- API Keys table (linked to Supabase Auth users)
 CREATE TABLE api_keys (
@@ -22,6 +23,7 @@ CREATE TABLE sessions (
     repo VARCHAR(255),
     sandbox_id VARCHAR(255),
     snapshot_id VARCHAR(255),
+    opencode_session_id VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     last_activity_at TIMESTAMPTZ DEFAULT NOW(),
     terminated_at TIMESTAMPTZ
@@ -45,7 +47,7 @@ CREATE INDEX idx_sessions_api_key_id ON sessions(api_key_id);
 CREATE INDEX idx_sessions_api_key_status ON sessions(api_key_id, status);
 CREATE INDEX idx_usage_records_api_key_created ON usage_records(api_key_id, created_at DESC);
 
--- Row Level Security (RLS) - users can only see their own data
+-- Row Level Security (RLS)
 ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_records ENABLE ROW LEVEL SECURITY;
@@ -72,9 +74,6 @@ CREATE POLICY "Users can view own sessions"
 CREATE POLICY "Users can view own usage"
     ON usage_records FOR SELECT
     USING (api_key_id IN (SELECT id FROM api_keys WHERE user_id = auth.uid()));
-
--- Service role bypass for API (Cloudflare Workers uses service key)
--- The service_role key bypasses RLS, so your API can read/write all data
 
 -- Function to create API key (callable from dashboard)
 CREATE OR REPLACE FUNCTION create_api_key(
