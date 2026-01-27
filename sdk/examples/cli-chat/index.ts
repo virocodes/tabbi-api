@@ -42,7 +42,7 @@ async function main() {
   }
 
   // Initialize the client
-  const baseUrl = process.env.TABBI_API_URL || "http://localhost:8787";
+  const baseUrl = process.env.TABBI_API_URL || "https://tabbi-api.dbellan1291.workers.dev";
   const tabbi = new Tabbi({
     apiKey,
     baseUrl,

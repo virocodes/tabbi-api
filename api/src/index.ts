@@ -11,7 +11,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env } from "./types";
-import { authMiddleware } from "./middleware/auth";
+import { supabaseAuthMiddleware } from "./middleware/supabase-auth";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { sessions } from "./routes/sessions";
 import { openApiSpec } from "./openapi";
@@ -60,7 +60,7 @@ app.get("/docs", (c) => {
 const v1 = new Hono<{ Bindings: Env }>();
 
 // Apply auth and rate limiting to all v1 routes
-v1.use("*", authMiddleware);
+v1.use("*", supabaseAuthMiddleware);
 v1.use("*", rateLimitMiddleware);
 
 // Mount sessions router

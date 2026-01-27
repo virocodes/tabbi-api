@@ -228,8 +228,11 @@ wrangler secret put SANDBOX_SERVICE_URL
 wrangler secret put SANDBOX_SERVICE_API_KEY
 # Paste: The INTERNAL_API_KEY from your sandbox-service
 
-wrangler secret put DATABASE_URL
-# Paste: Your Supabase PostgreSQL connection string
+wrangler secret put SUPABASE_URL
+# Paste: https://xxx.supabase.co (from Supabase Settings > API)
+
+wrangler secret put SUPABASE_SERVICE_KEY
+# Paste: service_role key from Supabase Settings > API
 
 wrangler secret put UPSTASH_REDIS_URL
 # Paste: https://xxx.upstash.io
@@ -374,7 +377,8 @@ await session.delete();
 |----------|--------------|---------|
 | `SANDBOX_SERVICE_URL` | Your sandbox-service deployment | `https://your-sandbox-service.com` |
 | `SANDBOX_SERVICE_API_KEY` | Same as `INTERNAL_API_KEY` above | `your-internal-api-key` |
-| `DATABASE_URL` | Supabase Settings > Database > Connection string | `postgresql://...` |
+| `SUPABASE_URL` | Supabase Settings > API > Project URL | `https://xxx.supabase.co` |
+| `SUPABASE_SERVICE_KEY` | Supabase Settings > API > service_role | `eyJhbG...` |
 | `UPSTASH_REDIS_URL` | Upstash dashboard | `https://xxx.upstash.io` |
 | `UPSTASH_REDIS_TOKEN` | Upstash dashboard | `AXxxxxxxxxxxxx` |
 | `ANTHROPIC_API_KEY` | Anthropic console | `sk-ant-xxxxx` |

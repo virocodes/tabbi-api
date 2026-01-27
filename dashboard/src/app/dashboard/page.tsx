@@ -2,9 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import { supabase, getApiKeys, getUsageStats, type ApiKey } from "@/lib/supabase";
-import { Header } from "@/components/Header";
 import { ApiKeyList } from "@/components/ApiKeyList";
 import { CreateKeyModal } from "@/components/CreateKeyModal";
 import { UsageStats } from "@/components/UsageStats";
@@ -21,6 +19,7 @@ export default function DashboardPage() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -50,7 +49,7 @@ export default function DashboardPage() {
     checkAuth();
   }, [router, loadData]);
 
-  const handleKeyCreated = (key: string, keyData: ApiKey) => {
+  const handleKeyCreated = (_key: string, keyData: ApiKey) => {
     setKeys((prev) => [keyData, ...prev]);
   };
 
@@ -62,124 +61,161 @@ export default function DashboardPage() {
     );
   };
 
+  const handleSignOut = async () => {
+    setIsLoggingOut(true);
+    await supabase.auth.signOut();
+    router.push("/auth");
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex items-center gap-3">
-          <span className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-          <span className="text-text-secondary font-mono">Loading...</span>
-        </div>
+      <div className="loading-page">
+        <span className="loading-cat">{">⩊<"}</span>
+        <span style={{ color: "var(--text-secondary)", fontSize: "var(--font-size-sm)" }}>
+          Loading...
+        </span>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
-      <Header email={email} />
-
-      {/* Background grid */}
-      <div
-        className="fixed inset-0 opacity-[0.015] pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(to right, #333 1px, transparent 1px),
-            linear-gradient(to bottom, #333 1px, transparent 1px)
-          `,
-          backgroundSize: "60px 60px",
-        }}
-      />
-
-      <main className="relative max-w-6xl mx-auto px-6 py-10">
-        {/* Page header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-10"
-        >
-          <h1 className="text-2xl font-semibold text-text-primary mb-2">
-            Dashboard
-          </h1>
-          <p className="text-text-secondary">
-            Manage your API keys and monitor usage
-          </p>
-        </motion.div>
-
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Main content */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* API Keys section */}
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 }}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-medium text-text-primary">API Keys</h2>
-                <button
-                  onClick={() => setIsModalOpen(true)}
-                  className="btn-primary"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Create Key
-                </button>
-              </div>
-              <ApiKeyList keys={keys} onRevoke={handleKeyRevoked} />
-            </motion.section>
-
-            {/* Usage stats */}
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              <h2 className="text-lg font-medium text-text-primary mb-4">Usage</h2>
-              <UsageStats {...stats} />
-            </motion.section>
+    <div className="app-layout">
+      {/* Sidebar */}
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <div className="sidebar-logo">
+            <span className="logo-emoticon">{">⩊<"}</span>
+            <span>tabbi</span>
           </div>
+        </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            <QuickStart />
+        <nav className="sidebar-nav">
+          <a href="#" className="sidebar-nav-item active">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+            </svg>
+            Dashboard
+          </a>
+          <a href="#" className="sidebar-nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+            </svg>
+            API Keys
+          </a>
+          <a href="#" className="sidebar-nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20V10" />
+              <path d="M18 20V4" />
+              <path d="M6 20v-4" />
+            </svg>
+            Usage
+          </a>
+          <a href="/docs" className="sidebar-nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+            Documentation
+          </a>
+        </nav>
 
-            {/* Help card */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="card"
-            >
-              <h3 className="text-sm font-medium text-text-primary mb-3">
-                Need help?
-              </h3>
-              <ul className="space-y-2 text-sm">
-                <li>
-                  <a href="#" className="text-text-secondary hover:text-accent transition-colors flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+        <div className="sidebar-footer">
+          <div className="user-info">
+            <div className="user-avatar">
+              {email.charAt(0).toUpperCase()}
+            </div>
+            <span className="user-name">{email}</span>
+          </div>
+          <button onClick={handleSignOut} disabled={isLoggingOut} className="logout-btn">
+            {isLoggingOut ? "Signing out..." : "Sign Out"}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <main className="main-content">
+        <header className="page-header">
+          <h1 className="page-title">Dashboard</h1>
+          <p className="page-subtitle">Manage your API keys and monitor usage</p>
+        </header>
+
+        <div className="content-area">
+          <div className="content-grid">
+            {/* Left column - Main content */}
+            <div>
+              {/* API Keys Card */}
+              <div className="card" style={{ marginBottom: "var(--space-6)" }}>
+                <div className="card-header">
+                  <h2 className="card-title">API Keys</h2>
+                  <button onClick={() => setIsModalOpen(true)} className="btn btn-primary">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
-                    Documentation
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-text-secondary hover:text-accent transition-colors flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    FAQ
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-text-secondary hover:text-accent transition-colors flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-                    </svg>
-                    GitHub
-                  </a>
-                </li>
-              </ul>
-            </motion.div>
+                    Create Key
+                  </button>
+                </div>
+                <ApiKeyList keys={keys} onRevoke={handleKeyRevoked} />
+              </div>
+
+              {/* Usage Stats */}
+              <div>
+                <h2 style={{
+                  fontSize: "var(--font-size-base)",
+                  fontWeight: 600,
+                  color: "var(--text-primary)",
+                  marginBottom: "var(--space-4)"
+                }}>
+                  Usage
+                </h2>
+                <UsageStats {...stats} />
+              </div>
+            </div>
+
+            {/* Right column - Sidebar content */}
+            <div>
+              <QuickStart />
+
+              {/* Help Card */}
+              <div className="help-card">
+                <h3 className="help-card-title">Need help?</h3>
+                <ul className="help-card-list">
+                  <li className="help-card-item">
+                    <a href="/docs" className="help-card-link">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                      </svg>
+                      Documentation
+                    </a>
+                  </li>
+                  <li className="help-card-item">
+                    <a href={process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/docs` : "https://api.tabbi.sh/docs"} target="_blank" rel="noopener noreferrer" className="help-card-link">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                        <line x1="6" y1="6" x2="6.01" y2="6" />
+                        <line x1="6" y1="18" x2="6.01" y2="18" />
+                      </svg>
+                      API Reference
+                    </a>
+                  </li>
+                  <li className="help-card-item">
+                    <a href="https://github.com" className="help-card-link">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+                      </svg>
+                      GitHub
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       </main>
@@ -190,14 +226,6 @@ export default function DashboardPage() {
         onClose={() => setIsModalOpen(false)}
         onCreated={handleKeyCreated}
       />
-
-      {/* Terminal decoration */}
-      <div className="fixed bottom-6 left-6 hidden lg:flex items-center gap-2 text-text-muted font-mono text-xs">
-        <span className="text-accent">~</span>
-        <span>tabbi</span>
-        <span className="text-accent">$</span>
-        <span className="w-1.5 h-3 bg-accent animate-blink" />
-      </div>
     </div>
   );
 }

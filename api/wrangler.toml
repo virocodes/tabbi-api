@@ -10,7 +10,8 @@ compatibility_flags = ["nodejs_compat"]
 # Secrets (set via wrangler secret put)
 # SANDBOX_SERVICE_URL
 # SANDBOX_SERVICE_API_KEY
-# DATABASE_URL
+# SUPABASE_URL - Supabase project URL (e.g., https://xxx.supabase.co)
+# SUPABASE_SERVICE_KEY - Supabase service_role key (Settings > API)
 # UPSTASH_REDIS_URL
 # UPSTASH_REDIS_TOKEN
 # ANTHROPIC_API_KEY

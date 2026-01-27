@@ -15,25 +15,15 @@ export function Header({ email }: { email: string }) {
   };
 
   return (
-    <header className="border-b border-border bg-bg-secondary/50 backdrop-blur-sm sticky top-0 z-50">
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        {/* Logo */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center glow-sm">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="w-4 h-4 text-accent"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M12 2L2 7l10 5 10-5-10-5z" />
-              <path d="M2 17l10 5 10-5" />
-              <path d="M2 12l10 5 10-5" />
-            </svg>
-          </div>
-          <span className="font-mono text-lg font-semibold tracking-tight">
-            agent<span className="text-accent">.</span>api
+    <header className="border-b border-border bg-bg-elevated/80 backdrop-blur-sm sticky top-0 z-50">
+      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+        {/* Logo with cat mascot */}
+        <div className="flex items-center gap-2.5">
+          <span className="cat-mascot text-lg animate-cat-float">
+            {"ฅ^>⩊<^ฅ"}
+          </span>
+          <span className="text-lg font-semibold text-text-primary tracking-tight">
+            tabbi
           </span>
         </div>
 
@@ -41,7 +31,7 @@ export function Header({ email }: { email: string }) {
         <div className="flex items-center gap-4">
           <div className="hidden sm:flex items-center gap-2 text-sm">
             <span className="text-text-muted">signed in as</span>
-            <span className="text-text-secondary font-mono">{email}</span>
+            <span className="text-text-secondary font-medium">{email}</span>
           </div>
           <button
             onClick={handleSignOut}

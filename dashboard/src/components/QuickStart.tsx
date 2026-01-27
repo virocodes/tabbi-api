@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
 
 export function QuickStart() {
   const [copied, setCopied] = useState<string | null>(null);
@@ -30,103 +29,97 @@ await session.sendMessage("Build a REST API", {
 await session.delete();`;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.25 }}
-      className="card"
-    >
-      <h3 className="text-sm font-medium text-text-primary mb-4">Quick Start</h3>
+    <div className="quickstart card">
+      <h3 className="quickstart-title">Quick Start</h3>
 
       {/* Install command */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-text-muted font-mono">Install</span>
+      <div className="quickstart-section">
+        <div className="quickstart-header">
+          <span className="quickstart-label">Install</span>
           <button
             onClick={() => handleCopy(installCode, "install")}
-            className="text-xs text-text-muted hover:text-text-secondary transition-colors"
+            className="quickstart-copy"
           >
             {copied === "install" ? "Copied!" : "Copy"}
           </button>
         </div>
-        <div className="bg-bg-tertiary border border-border rounded-md p-3 font-mono text-sm">
-          <span className="text-text-muted">$</span>{" "}
-          <span className="text-accent">npm</span>{" "}
-          <span className="text-text-primary">install @tabbi/sdk</span>
+        <div className="code-block">
+          <span className="code-prompt">$</span>{" "}
+          <span className="code-command">npm</span>{" "}
+          <span className="code-text">install @tabbi/sdk</span>
         </div>
       </div>
 
       {/* Usage example */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-text-muted font-mono">Usage</span>
+      <div className="quickstart-section">
+        <div className="quickstart-header">
+          <span className="quickstart-label">Usage</span>
           <button
             onClick={() => handleCopy(usageCode, "usage")}
-            className="text-xs text-text-muted hover:text-text-secondary transition-colors"
+            className="quickstart-copy"
           >
             {copied === "usage" ? "Copied!" : "Copy"}
           </button>
         </div>
-        <div className="bg-bg-tertiary border border-border rounded-md p-3 font-mono text-xs overflow-x-auto">
-          <pre className="text-text-secondary">
+        <div className="code-block code-block-sm">
+          <pre className="code-pre">
             <code>
-              <span className="text-purple-400">import</span>{" "}
-              <span className="text-text-primary">{"{ Tabbi }"}</span>{" "}
-              <span className="text-purple-400">from</span>{" "}
-              <span className="text-accent">&quot;@tabbi/sdk&quot;</span>;
-              {"\n\n"}
-              <span className="text-purple-400">const</span>{" "}
-              <span className="text-text-primary">agent</span>{" "}
-              <span className="text-text-muted">=</span>{" "}
-              <span className="text-purple-400">new</span>{" "}
-              <span className="text-yellow-400">Tabbi</span>
-              <span className="text-text-muted">({"{"}</span>
+              <span className="code-keyword">import</span>{" "}
+              <span className="code-text">{`{ Tabbi }`}</span>{" "}
+              <span className="code-keyword">from</span>{" "}
+              <span className="code-string">&quot;@tabbi/sdk&quot;</span>;
+              {"\n"}
+              <span className="code-keyword">const</span>{" "}
+              <span className="code-text">agent</span>{" "}
+              <span className="code-muted">=</span>{" "}
+              <span className="code-keyword">new</span>{" "}
+              <span className="code-fn">Tabbi</span>
+              <span className="code-muted">({`{`}</span>
               {"\n  "}
-              <span className="text-text-primary">apiKey</span>
-              <span className="text-text-muted">:</span>{" "}
-              <span className="text-accent">&quot;tb_live_...&quot;</span>
+              <span className="code-text">apiKey</span>
+              <span className="code-muted">:</span>{" "}
+              <span className="code-string">&quot;tb_live_...&quot;</span>
               {"\n"}
-              <span className="text-text-muted">{"})"}</span>;
-              {"\n\n"}
-              <span className="text-purple-400">const</span>{" "}
-              <span className="text-text-primary">session</span>{" "}
-              <span className="text-text-muted">=</span>{" "}
-              <span className="text-purple-400">await</span>{" "}
-              <span className="text-text-primary">agent</span>
-              <span className="text-text-muted">.</span>
-              <span className="text-yellow-400">createSession</span>
-              <span className="text-text-muted">();</span>
+              <span className="code-muted">{`})`}</span>;
               {"\n"}
-              <span className="text-purple-400">await</span>{" "}
-              <span className="text-text-primary">session</span>
-              <span className="text-text-muted">.</span>
-              <span className="text-yellow-400">waitForReady</span>
-              <span className="text-text-muted">();</span>
-              {"\n\n"}
-              <span className="text-purple-400">await</span>{" "}
-              <span className="text-text-primary">session</span>
-              <span className="text-text-muted">.</span>
-              <span className="text-yellow-400">sendMessage</span>
-              <span className="text-text-muted">(</span>
-              <span className="text-accent">&quot;Build a REST API&quot;</span>
-              <span className="text-text-muted">);</span>
+              <span className="code-keyword">const</span>{" "}
+              <span className="code-text">session</span>{" "}
+              <span className="code-muted">=</span>{" "}
+              <span className="code-keyword">await</span>{" "}
+              <span className="code-text">agent</span>
+              <span className="code-muted">.</span>
+              <span className="code-fn">createSession</span>
+              <span className="code-muted">();</span>
+              {"\n"}
+              <span className="code-keyword">await</span>{" "}
+              <span className="code-text">session</span>
+              <span className="code-muted">.</span>
+              <span className="code-fn">waitForReady</span>
+              <span className="code-muted">();</span>
+              {"\n"}
+              <span className="code-keyword">await</span>{" "}
+              <span className="code-text">session</span>
+              <span className="code-muted">.</span>
+              <span className="code-fn">sendMessage</span>
+              <span className="code-muted">(</span>
+              <span className="code-string">&quot;Build a REST API&quot;</span>
+              <span className="code-muted">);</span>
             </code>
           </pre>
         </div>
       </div>
 
       {/* Docs link */}
-      <div className="mt-4 pt-4 border-t border-border">
-        <a
-          href="#"
-          className="text-sm text-accent hover:underline inline-flex items-center gap-1.5"
-        >
+      <div className="quickstart-footer">
+        <a href="#" className="quickstart-link">
           Read the documentation
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
           </svg>
         </a>
       </div>
-    </motion.div>
+    </div>
   );
 }

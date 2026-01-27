@@ -13,7 +13,7 @@ import type {
   SessionState,
 } from "../types";
 import { logger } from "../utils/logger";
-import { DatabaseOperations } from "../utils/database";
+import { SupabaseDatabaseOperations } from "../utils/supabase-database";
 import {
   validateCreateSessionRequest,
   validateSendMessageRequest,
@@ -73,8 +73,8 @@ sessions.post("/", async (c) => {
   const stub = c.env.SESSION_AGENT.get(id);
 
   // Record in database using waitUntil for reliability
-  if (c.env.DATABASE_URL) {
-    const db = new DatabaseOperations(c.env.DATABASE_URL);
+  if (c.env.SUPABASE_URL && c.env.SUPABASE_SERVICE_KEY) {
+    const db = new SupabaseDatabaseOperations(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY);
     c.executionCtx.waitUntil(
       db.recordSessionCreated(sessionId, auth.apiKeyId, sanitizeString(body.repo))
         .catch((err) => log.error("Failed to record session", err))
@@ -289,8 +289,8 @@ sessions.post("/:id/messages", async (c) => {
   }
 
   // Record usage using waitUntil
-  if (c.env.DATABASE_URL) {
-    const db = new DatabaseOperations(c.env.DATABASE_URL);
+  if (c.env.SUPABASE_URL && c.env.SUPABASE_SERVICE_KEY) {
+    const db = new SupabaseDatabaseOperations(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY);
     c.executionCtx.waitUntil(
       db.recordMessageSent(sessionId, auth.apiKeyId)
         .catch((err) => log.error("Failed to record message", err))
@@ -513,8 +513,8 @@ sessions.delete("/:id", async (c) => {
   }
 
   // Record termination using waitUntil
-  if (c.env.DATABASE_URL) {
-    const db = new DatabaseOperations(c.env.DATABASE_URL);
+  if (c.env.SUPABASE_URL && c.env.SUPABASE_SERVICE_KEY) {
+    const db = new SupabaseDatabaseOperations(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY);
     c.executionCtx.waitUntil(
       db.recordSessionTerminated(sessionId)
         .catch((err) => log.error("Failed to record termination", err))
