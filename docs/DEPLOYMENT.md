@@ -5,10 +5,10 @@ This guide gets your Tabbi MVP to production as fast as possible using the servi
 ## Architecture Overview
 
 ```
-┌─────────────────┐     ┌──────────────────────┐     ┌──────────────────┐
-│   SDK Client    │────▶│  Cloudflare Workers  │────▶│  Daytona Sandbox │
-└─────────────────┘     │  + Durable Objects   │     │   (OpenCode)     │
-                        └──────────────────────┘     └──────────────────┘
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐     ┌──────────────────┐
+│   SDK Client    │────▶│  Cloudflare Workers  │────▶│ Sandbox Service │────▶│  Daytona Sandbox │
+└─────────────────┘     │  + Durable Objects   │     │    (Node.js)    │     │   (OpenCode)     │
+                        └──────────────────────┘     └─────────────────┘     └──────────────────┘
                                    │
                     ┌──────────────┼──────────────┐
                     ▼              ▼              ▼
@@ -33,9 +33,10 @@ This guide gets your Tabbi MVP to production as fast as possible using the servi
 | [Upstash](https://upstash.com) | Redis rate limiting | 10k commands/day | 3 min |
 | [Daytona](https://daytona.io) | Sandbox compute | $30 free credits | 5 min |
 | [Anthropic](https://console.anthropic.com) | Claude API | Pay-as-you-go | 2 min |
+| Node.js hosting | Sandbox service | Varies by provider | 5 min |
 | [Vercel](https://vercel.com) | Dashboard hosting | Unlimited sites | 5 min |
 
-**Total setup time: ~30 minutes**
+**Total setup time: ~35 minutes**
 
 ---
 
@@ -53,7 +54,7 @@ Supabase provides PostgreSQL database, authentication, and Row Level Security in
 ### 1.2 Run Schema Migration
 
 1. In your Supabase dashboard, go to **SQL Editor**
-2. Paste the contents of `database/supabase-schema.sql`
+2. Paste the contents of `database/schema.sql`
 3. Click **Run** to execute
 
 This creates:
@@ -135,7 +136,7 @@ From the Daytona dashboard, you'll need:
 - **API Key**: Your Daytona API key
 - **Snapshot ID**: The ID from the snapshot create command
 
-These go into your Cloudflare Workers secrets.
+These go into your sandbox-service environment variables (Step 4b).
 
 ---
 
@@ -144,6 +145,41 @@ These go into your Cloudflare Workers secrets.
 1. Go to [console.anthropic.com](https://console.anthropic.com)
 2. Create an API key
 3. Copy the key (starts with `sk-ant-`)
+
+---
+
+## Step 4b: Deploy Sandbox Service (5 min)
+
+The sandbox-service is a Node.js service that manages Daytona sandbox infrastructure. It must be deployed before the Cloudflare Workers API.
+
+### 4b.1 Configure Environment
+
+```bash
+cd sandbox-service
+
+# Copy example env file
+cp .env.example .env
+```
+
+Edit `.env`:
+```env
+PORT=3000
+INTERNAL_API_KEY=your-internal-api-key-here  # Generate with: openssl rand -hex 32
+DAYTONA_API_KEY=your-daytona-api-key
+DAYTONA_API_URL=https://app.daytona.io/api
+DAYTONA_SNAPSHOT_ID=your-snapshot-id
+```
+
+### 4b.2 Deploy
+
+Deploy the sandbox-service to your preferred Node.js hosting platform (e.g., Railway, Render, Fly.io, or a VPS).
+
+```bash
+npm run build
+npm run start
+```
+
+Note the deployment URL - you'll need it for `SANDBOX_SERVICE_URL` in the API configuration.
 
 ---
 
@@ -163,7 +199,7 @@ These go into your Cloudflare Workers secrets.
 ```toml
 name = "tabbi-api"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-05-12"
 compatibility_flags = ["nodejs_compat"]
 
 # Durable Objects
@@ -173,11 +209,11 @@ class_name = "SessionAgent"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["SessionAgent"]
+new_sqlite_classes = ["SessionAgent"]
 
-# Environment variables (non-secret)
-[vars]
-DAYTONA_API_URL = "https://api.daytona.io"
+[dev]
+port = 8787
+local_protocol = "http"
 ```
 
 ### 5.3 Set Secrets
@@ -186,23 +222,20 @@ DAYTONA_API_URL = "https://api.daytona.io"
 cd api
 
 # Set each secret
-wrangler secret put SUPABASE_URL
-# Paste: https://xxx.supabase.co
+wrangler secret put SANDBOX_SERVICE_URL
+# Paste: URL of your deployed sandbox-service (see Step 5b)
 
-wrangler secret put SUPABASE_SERVICE_KEY
-# Paste: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (service_role key)
+wrangler secret put SANDBOX_SERVICE_API_KEY
+# Paste: The INTERNAL_API_KEY from your sandbox-service
+
+wrangler secret put DATABASE_URL
+# Paste: Your Supabase PostgreSQL connection string
 
 wrangler secret put UPSTASH_REDIS_URL
 # Paste: https://xxx.upstash.io
 
 wrangler secret put UPSTASH_REDIS_TOKEN
 # Paste: AXxxxxxxxxxxxx
-
-wrangler secret put DAYTONA_API_KEY
-# Paste: your-daytona-api-key
-
-wrangler secret put DAYTONA_SNAPSHOT_ID
-# Paste: your-snapshot-id
 
 wrangler secret put ANTHROPIC_API_KEY
 # Paste: sk-ant-xxxxx
@@ -242,6 +275,7 @@ Edit `.env.local`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+NEXT_PUBLIC_API_URL=https://tabbi-api.your-subdomain.workers.dev
 ```
 
 > **Note:** Use the **anon** key here, not the service role key. The anon key is safe for client-side use.
@@ -324,17 +358,25 @@ await session.delete();
 
 ## Environment Variables Summary
 
+### Sandbox Service
+
+| Variable | Where to Get | Example |
+|----------|--------------|---------|
+| `PORT` | Your choice | `3000` |
+| `INTERNAL_API_KEY` | Generate: `openssl rand -hex 32` | `your-internal-api-key` |
+| `DAYTONA_API_KEY` | Daytona dashboard | `your-api-key` |
+| `DAYTONA_API_URL` | Default | `https://app.daytona.io/api` |
+| `DAYTONA_SNAPSHOT_ID` | Snapshot create output | `your-snapshot-id` |
+
 ### Cloudflare Workers (API)
 
 | Variable | Where to Get | Example |
 |----------|--------------|---------|
-| `SUPABASE_URL` | Supabase Settings > API | `https://xxx.supabase.co` |
-| `SUPABASE_SERVICE_KEY` | Supabase Settings > API | `eyJhbG...` (service_role) |
+| `SANDBOX_SERVICE_URL` | Your sandbox-service deployment | `https://your-sandbox-service.com` |
+| `SANDBOX_SERVICE_API_KEY` | Same as `INTERNAL_API_KEY` above | `your-internal-api-key` |
+| `DATABASE_URL` | Supabase Settings > Database > Connection string | `postgresql://...` |
 | `UPSTASH_REDIS_URL` | Upstash dashboard | `https://xxx.upstash.io` |
 | `UPSTASH_REDIS_TOKEN` | Upstash dashboard | `AXxxxxxxxxxxxx` |
-| `DAYTONA_API_KEY` | Daytona dashboard | `your-api-key` |
-| `DAYTONA_API_URL` | Default or self-hosted | `https://api.daytona.io` |
-| `DAYTONA_SNAPSHOT_ID` | Snapshot create output | `your-snapshot-id` |
 | `ANTHROPIC_API_KEY` | Anthropic console | `sk-ant-xxxxx` |
 
 ### Dashboard (Vercel)
@@ -343,6 +385,7 @@ await session.delete();
 |----------|--------------|---------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Settings > API | `https://xxx.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Settings > API | `eyJhbG...` (anon) |
+| `NEXT_PUBLIC_API_URL` | Your Cloudflare Workers URL | `https://tabbi-api.xxx.workers.dev` |
 
 ---
 
@@ -368,9 +411,10 @@ await session.delete();
 - Check key isn't revoked (`revoked_at` should be NULL)
 
 ### "Sandbox creation failed"
-- Verify `DAYTONA_API_KEY` is correct and not expired
-- Verify `DAYTONA_SNAPSHOT_ID` points to a valid snapshot
-- Check Anthropic API key is valid
+- Verify sandbox-service is running and accessible
+- Verify `SANDBOX_SERVICE_URL` and `SANDBOX_SERVICE_API_KEY` are correct
+- Check sandbox-service logs for Daytona errors
+- Verify `DAYTONA_API_KEY` and `DAYTONA_SNAPSHOT_ID` in sandbox-service
 - Check Daytona dashboard for sandbox status
 
 ### "Rate limit exceeded"
@@ -407,14 +451,20 @@ await session.delete();
 
 ## Production Checklist
 
+### Sandbox Service
+- [ ] Deployed to Node.js hosting platform
+- [ ] Environment variables configured
+- [ ] Daytona snapshot created and tested
+- [ ] Health check endpoint responding
+
 ### API (Cloudflare Workers)
 - [ ] All secrets set in Cloudflare Workers
-- [ ] Daytona snapshot created and tested
+- [ ] `SANDBOX_SERVICE_URL` pointing to sandbox-service
 - [ ] Custom domain configured (optional but recommended)
 - [ ] Rate limits appropriate for your use case
 
 ### Database (Supabase)
-- [ ] Database schema migrated (`supabase-schema.sql`)
+- [ ] Database schema migrated (`database/schema.sql`)
 - [ ] RLS policies enabled and tested
 - [ ] Auth redirect URLs configured
 - [ ] Backup strategy confirmed (Supabase has automatic backups)
