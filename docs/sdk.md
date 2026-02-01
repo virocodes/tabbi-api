@@ -5,13 +5,13 @@ TypeScript SDK for building AI coding agent applications.
 ## Installation
 
 ```bash
-npm install @tabbi/sdk
+npm install tabbi-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { Tabbi } from "@tabbi/sdk";
+import { Tabbi } from "tabbi-sdk";
 
 // Initialize the client
 const tabbi = new Tabbi({
@@ -296,7 +296,7 @@ interface Message {
 The SDK throws `TabbiError` for API errors.
 
 ```typescript
-import { TabbiError } from "@tabbi/sdk";
+import { TabbiError } from "tabbi-sdk";
 
 try {
   await session.sendMessage("...");
@@ -330,7 +330,7 @@ try {
 ### Basic Usage
 
 ```typescript
-import { Tabbi } from "@tabbi/sdk";
+import { Tabbi } from "tabbi-sdk";
 
 const tabbi = new Tabbi({ apiKey: process.env.TABBI_API_KEY! });
 

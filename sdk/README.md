@@ -1,17 +1,17 @@
-# @tabbi/sdk
+# tabbi-sdk
 
 TypeScript SDK for building AI coding agent applications with Tabbi.
 
 ## Installation
 
 ```bash
-npm install @tabbi/sdk
+npm install tabbi-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { Tabbi } from "@tabbi/sdk";
+import { Tabbi } from "tabbi-sdk";
 
 const tabbi = new Tabbi({
   apiKey: "tb_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -154,7 +154,7 @@ Events received via `onEvent` callback:
 ## Error Handling
 
 ```typescript
-import { TabbiError } from "@tabbi/sdk";
+import { TabbiError } from "tabbi-sdk";
 
 try {
   await session.sendMessage("...");

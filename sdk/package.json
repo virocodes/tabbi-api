@@ -1,6 +1,6 @@
 {
-  "name": "@tabbi/sdk",
-  "version": "0.1.0",
+  "name": "tabbi-sdk",
+  "version": "0.1.1",
   "description": "TypeScript SDK for Tabbi",
   "type": "module",
   "main": "./dist/index.js",
@@ -34,6 +34,7 @@
     "sdk"
   ],
   "license": "MIT",
+  "homepage": "https://www.tabbi.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/virocodes/tabbi-api.git"

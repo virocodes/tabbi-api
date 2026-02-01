@@ -335,7 +335,7 @@ curl -X POST https://api.tabbi.dev/v1/sessions \
 ### Test with SDK
 
 ```typescript
-import { Tabbi } from "@tabbi/sdk";
+import { Tabbi } from "tabbi-sdk";
 
 const tabbi = new Tabbi({
   apiKey: "tb_live_abc123def456ghi789jkl012mno345pq",

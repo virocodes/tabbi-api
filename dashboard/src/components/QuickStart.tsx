@@ -11,9 +11,9 @@ export function QuickStart() {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const installCode = `npm install @tabbi/sdk`;
+  const installCode = `npm install tabbi-sdk`;
 
-  const usageCode = `import { Tabbi } from "@tabbi/sdk";
+  const usageCode = `import { Tabbi } from "tabbi-sdk";
 
 const tabbi = new Tabbi({
   apiKey: "tb_live_your_key_here"
@@ -46,7 +46,7 @@ await session.delete();`;
         <div className="code-block">
           <span className="code-prompt">$</span>{" "}
           <span className="code-command">npm</span>{" "}
-          <span className="code-text">install @tabbi/sdk</span>
+          <span className="code-text">install tabbi-sdk</span>
         </div>
       </div>
 
@@ -67,7 +67,7 @@ await session.delete();`;
               <span className="code-keyword">import</span>{" "}
               <span className="code-text">{`{ Tabbi }`}</span>{" "}
               <span className="code-keyword">from</span>{" "}
-              <span className="code-string">&quot;@tabbi/sdk&quot;</span>;
+              <span className="code-string">&quot;tabbi-sdk&quot;</span>;
               {"\n"}
               <span className="code-keyword">const</span>{" "}
               <span className="code-text">agent</span>{" "}

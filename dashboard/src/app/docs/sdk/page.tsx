@@ -9,10 +9,10 @@ export default function SDKDocsPage() {
       <p className="docs-subtitle">TypeScript SDK for building AI coding agent applications.</p>
 
       <h2>Installation</h2>
-      <CodeBlock language="bash">{`npm install @tabbi/sdk`}</CodeBlock>
+      <CodeBlock language="bash">{`npm install tabbi-sdk`}</CodeBlock>
 
       <h2>Quick Start</h2>
-      <CodeBlock>{`import { Tabbi } from "@tabbi/sdk";
+      <CodeBlock>{`import { Tabbi } from "tabbi-sdk";
 
 // Initialize the client
 const tabbi = new Tabbi({
@@ -341,7 +341,7 @@ interface ErrorData {
 
       <h2>Error Handling</h2>
       <p>The SDK throws <code>TabbiError</code> for API errors.</p>
-      <CodeBlock>{`import { TabbiError } from "@tabbi/sdk";
+      <CodeBlock>{`import { TabbiError } from "tabbi-sdk";
 
 try {
   await session.sendMessage("...");
@@ -416,7 +416,7 @@ try {
       <h2>Examples</h2>
 
       <h3>Basic Usage</h3>
-      <CodeBlock>{`import { Tabbi } from "@tabbi/sdk";
+      <CodeBlock>{`import { Tabbi } from "tabbi-sdk";
 
 const tabbi = new Tabbi({ apiKey: process.env.TABBI_API_KEY! });
 

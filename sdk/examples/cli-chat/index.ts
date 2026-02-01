@@ -11,8 +11,8 @@
  */
 
 import * as readline from "readline";
-import { Tabbi, TabbiError } from "@tabbi/sdk";
-import type { SSEEvent } from "@tabbi/sdk";
+import { Tabbi, TabbiError } from "tabbi-sdk";
+import type { SSEEvent } from "tabbi-sdk";
 
 // ANSI color codes for terminal output
 const colors = {

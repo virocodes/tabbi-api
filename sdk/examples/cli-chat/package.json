@@ -10,7 +10,7 @@
     "start:built": "node dist/index.js"
   },
   "dependencies": {
-    "@tabbi/sdk": "file:../../"
+    "tabbi-sdk": "file:../../"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

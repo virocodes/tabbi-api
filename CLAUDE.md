@@ -11,7 +11,7 @@ Tabbi is a platform for building AI coding agent applications. It provides isola
 The project consists of 4 independent packages:
 
 - **api/** - Cloudflare Workers REST API with Hono framework, Durable Objects for session state, SSE streaming
-- **sdk/** - TypeScript client SDK (@tabbi/sdk) for interacting with sessions
+- **sdk/** - TypeScript client SDK (tabbi-sdk) for interacting with sessions
 - **dashboard/** - Next.js web UI for API key management and usage analytics with Supabase Auth
 - **sandbox-service/** - Node.js service managing Daytona sandbox infrastructure
 

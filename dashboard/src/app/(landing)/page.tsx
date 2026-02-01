@@ -22,7 +22,7 @@ export default function LandingPage() {
               Dashboard
             </Link>
             <a
-              href="https://github.com/yourusername/tabbi"
+              href="https://github.com/virocodes/tabbi-api"
               target="_blank"
               rel="noopener noreferrer"
               className="landing-nav-link"
@@ -91,11 +91,11 @@ export default function LandingPage() {
                 <div className="landing-code-install">
                   <span className="landing-code-prompt">$</span>
                   <span className="landing-code-cmd">npm install</span>
-                  <span className="landing-code-pkg">@tabbi/sdk</span>
+                  <span className="landing-code-pkg">tabbi-sdk</span>
                 </div>
                 <div className="landing-code-body">
                   <CodeBlock language="typescript">
-                    {`import { Tabbi } from "@tabbi/sdk";
+                    {`import { Tabbi } from "tabbi-sdk";
 
 const tabbi = new Tabbi({ apiKey: "tb_live_..." });
 
@@ -253,7 +253,7 @@ const files = await session.listFiles("/");`}
               Docs
             </Link>
             <a
-              href="https://github.com/yourusername/tabbi"
+              href="https://github.com/virocodes/tabbi-api"
               target="_blank"
               rel="noopener noreferrer"
               className="landing-footer-link"
