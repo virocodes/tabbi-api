@@ -29,7 +29,6 @@ new_sqlite_classes = ["SessionAgent"]
 port = 8787
 local_protocol = "http"
 
-# Production routes (uncomment and configure for deployment)
-# [[routes]]
-# pattern = "api.your-domain.com/*"
-# custom_domain = true
+# Production routes (configure custom domain via Cloudflare Dashboard)
+# Go to Workers & Pages > tabbi-api > Settings > Domains & Routes
+# Add api.tabbi.dev as a custom domain there
