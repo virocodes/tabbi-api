@@ -22,7 +22,7 @@ The \`/messages\` endpoint returns Server-Sent Events (SSE) for real-time stream
     license: { name: "MIT" },
   },
   servers: [
-    { url: "https://api.tabbi.sh", description: "Production" },
+    { url: "https://api.tabbi.dev", description: "Production" },
     { url: "http://localhost:8787", description: "Local Development" },
   ],
   security: [{ bearerAuth: [] }],

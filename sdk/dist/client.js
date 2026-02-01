@@ -3,7 +3,7 @@
  * @packageDocumentation
  */
 import { TabbiError } from "./types";
-const DEFAULT_BASE_URL = "https://api.tabbi.sh";
+const DEFAULT_BASE_URL = "https://api.tabbi.dev";
 const DEFAULT_TIMEOUT = 30000;
 /**
  * Generate a UUID v4 compatible with all environments

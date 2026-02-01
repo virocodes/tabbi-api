@@ -8,7 +8,6 @@
  *
  * Environment variables:
  *   TABBI_API_KEY - Your Tabbi API key (required)
- *   TABBI_API_URL - Custom API URL (optional)
  */
 
 import * as readline from "readline";
@@ -42,13 +41,9 @@ async function main() {
   }
 
   // Initialize the client
-  const baseUrl = process.env.TABBI_API_URL || "https://tabbi-api.dbellan1291.workers.dev";
-  const tabbi = new Tabbi({
-    apiKey,
-    baseUrl,
-  });
+  const tabbi = new Tabbi({ apiKey });
 
-  log("dim", `Connecting to: ${baseUrl}`);
+  log("dim", "Connecting to: https://api.tabbi.dev");
 
   log("cyan", "\n=== Tabbi CLI Chat ===\n");
   log("dim", "Creating a new session...\n");

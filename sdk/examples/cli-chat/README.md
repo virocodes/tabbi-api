@@ -9,16 +9,9 @@ A simple command-line interface for chatting with an AI agent using the Tabbi SD
    npm install
    ```
 
-2. Set your API key and URL:
+2. Set your API key:
    ```bash
    export TABBI_API_KEY=tb_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-   export TABBI_API_URL=https://tabbi-api.dbellan1291.workers.dev
-   ```
-
-   Or for local development:
-   ```bash
-   cd ../../../api && npm run dev
-   export TABBI_API_URL=http://localhost:8787
    ```
 
 ## Usage

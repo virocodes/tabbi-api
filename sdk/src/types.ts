@@ -19,7 +19,7 @@ export interface TabbiConfig {
 
   /**
    * Base URL for the API
-   * @defaultValue `https://api.tabbi.sh`
+   * @defaultValue `https://api.tabbi.dev`
    */
   baseUrl?: string;
 

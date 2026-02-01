@@ -17,7 +17,7 @@ import type {
 } from "./types";
 import { TabbiError } from "./types";
 
-const DEFAULT_BASE_URL = "https://api.tabbi.sh";
+const DEFAULT_BASE_URL = "https://api.tabbi.dev";
 const DEFAULT_TIMEOUT = 30000;
 
 /**

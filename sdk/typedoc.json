@@ -10,7 +10,7 @@
   "hideGenerator": true,
   "navigationLinks": {
     "GitHub": "https://github.com/tabbi-ai/tabbi",
-    "API Docs": "https://api.tabbi.sh/docs"
+    "API Docs": "https://api.tabbi.dev/docs"
   },
   "customCss": "./typedoc.css"
 }

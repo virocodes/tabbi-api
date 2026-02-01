@@ -251,7 +251,7 @@ wrangler secret put ANTHROPIC_API_KEY
 wrangler deploy
 ```
 
-You'll get a URL like: `https://tabbi-api.your-subdomain.workers.dev`
+You'll get a URL like: `https://api.tabbi.dev`
 
 ### 5.5 Custom Domain (Optional)
 
@@ -278,7 +278,7 @@ Edit `.env.local`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-NEXT_PUBLIC_API_URL=https://tabbi-api.your-subdomain.workers.dev
+NEXT_PUBLIC_API_URL=https://api.tabbi.dev
 ```
 
 > **Note:** Use the **anon** key here, not the service role key. The anon key is safe for client-side use.
@@ -319,14 +319,14 @@ In Supabase dashboard:
 ### Health Check
 
 ```bash
-curl https://tabbi-api.your-subdomain.workers.dev/health
+curl https://api.tabbi.dev/health
 # {"status":"ok"}
 ```
 
 ### Create a Session
 
 ```bash
-curl -X POST https://tabbi-api.your-subdomain.workers.dev/v1/sessions \
+curl -X POST https://api.tabbi.dev/v1/sessions \
   -H "Authorization: Bearer tb_live_abc123def456ghi789jkl012mno345pq" \
   -H "Content-Type: application/json" \
   -d '{}'
@@ -339,7 +339,7 @@ import { Tabbi } from "@tabbi/sdk";
 
 const tabbi = new Tabbi({
   apiKey: "tb_live_abc123def456ghi789jkl012mno345pq",
-  baseUrl: "https://tabbi-api.your-subdomain.workers.dev"
+  baseUrl: "https://api.tabbi.dev"
 });
 
 const session = await tabbi.createSession();
@@ -389,7 +389,7 @@ await session.delete();
 |----------|--------------|---------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Settings > API | `https://xxx.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Settings > API | `eyJhbG...` (anon) |
-| `NEXT_PUBLIC_API_URL` | Your Cloudflare Workers URL | `https://tabbi-api.xxx.workers.dev` |
+| `NEXT_PUBLIC_API_URL` | Your Cloudflare Workers URL | `https://api.tabbi.dev` |
 
 ---
 

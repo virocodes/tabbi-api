@@ -58,7 +58,7 @@ new Tabbi(config: TabbiConfig)
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `config.apiKey` | `string` | Yes | API key (`tb_live_xxx` or `tb_test_xxx`) |
-| `config.baseUrl` | `string` | No | API base URL (default: `https://api.tabbi.sh`) |
+| `config.baseUrl` | `string` | No | API base URL (default: `https://api.tabbi.dev`) |
 | `config.timeout` | `number` | No | Request timeout in ms (default: `30000`) |
 
 #### Methods
@@ -447,5 +447,5 @@ try {
 
 ```bash
 TABBI_API_KEY=tb_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TABBI_API_URL=https://api.tabbi.sh  # Optional
+TABBI_API_URL=https://api.tabbi.dev  # Optional
 ```

@@ -56,7 +56,7 @@ Main client class.
 ```typescript
 const tabbi = new Tabbi({
   apiKey: string,      // Required: API key (tb_live_xxx or tb_test_xxx)
-  baseUrl?: string,    // Optional: API URL (default: https://api.tabbi.sh)
+  baseUrl?: string,    // Optional: API URL (default: https://api.tabbi.dev)
   timeout?: number     // Optional: Request timeout in ms (default: 30000)
 });
 ```

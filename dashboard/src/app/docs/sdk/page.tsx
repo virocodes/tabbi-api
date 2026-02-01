@@ -71,7 +71,7 @@ await session.delete();`}</CodeBlock>
             <td><code>config.baseUrl</code></td>
             <td><code>string</code></td>
             <td>No</td>
-            <td>API base URL (default: <code>https://api.tabbi.sh</code>)</td>
+            <td>API base URL (default: <code>https://api.tabbi.dev</code>)</td>
           </tr>
           <tr>
             <td><code>config.timeout</code></td>
@@ -522,7 +522,7 @@ try {
 
       <h2>Environment Variables</h2>
       <CodeBlock language="bash">{`TABBI_API_KEY=tb_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TABBI_API_URL=https://api.tabbi.sh  # Optional`}</CodeBlock>
+TABBI_API_URL=https://api.tabbi.dev  # Optional`}</CodeBlock>
     </div>
   );
 }
