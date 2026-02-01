@@ -190,6 +190,7 @@ export class SessionAgent extends DurableObject {
       userId: string;
       repo?: string;
       gitToken?: string;
+      systemPrompt?: string;
       anthropicApiKey: string;
       sandboxServiceUrl: string;
       sandboxServiceApiKey: string;
@@ -243,7 +244,7 @@ export class SessionAgent extends DurableObject {
 
     // Start sandbox creation in background
     this.ctx.waitUntil(
-      this.createSandbox(config, body.repo, body.gitToken)
+      this.createSandbox(config, body.repo, body.gitToken, undefined, body.systemPrompt)
     );
 
     return Response.json(state, { status: 201 });
@@ -259,6 +260,7 @@ export class SessionAgent extends DurableObject {
       userId: string;
       repo?: string;
       gitToken?: string;
+      systemPrompt?: string;
       anthropicApiKey: string;
       sandboxServiceUrl: string;
       sandboxServiceApiKey: string;
@@ -345,6 +347,7 @@ export class SessionAgent extends DurableObject {
           anthropicApiKey: config.anthropicApiKey,
           repo: body.repo,
           gitToken: body.gitToken,
+          systemPrompt: body.systemPrompt,
         });
 
         const currentState = await this.getState();
@@ -415,7 +418,8 @@ export class SessionAgent extends DurableObject {
     config: SessionConfig,
     repo?: string,
     gitToken?: string,
-    existingOpencodeSessionId?: string
+    existingOpencodeSessionId?: string,
+    systemPrompt?: string
   ): Promise<void> {
     const proxy = new SandboxProxyClient(
       config.sandboxServiceUrl,
@@ -429,6 +433,7 @@ export class SessionAgent extends DurableObject {
         repo,
         gitToken,
         opencodeSessionId: existingOpencodeSessionId,
+        systemPrompt,
       });
 
       const state = await this.getState();

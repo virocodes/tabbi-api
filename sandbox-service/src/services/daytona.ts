@@ -53,6 +53,7 @@ export class DaytonaSandboxService {
     repo?: string;
     gitToken?: string;
     opencodeSessionId?: string;
+    systemPrompt?: string;
   }): Promise<CreateSandboxResponse> {
     console.log("[daytona] Creating sandbox", { repo: params.repo || "empty" });
 
@@ -133,6 +134,16 @@ export class DaytonaSandboxService {
     } else {
       // Create empty workspace
       await sandbox.process.executeCommand("mkdir -p /workspace");
+    }
+
+    // Write system prompt to AGENTS.md if provided
+    if (params.systemPrompt) {
+      console.log("[daytona] Writing system prompt to AGENTS.md");
+      // Escape single quotes for shell and write the file
+      const escapedPrompt = params.systemPrompt.replace(/'/g, "'\\''");
+      await sandbox.process.executeCommand(
+        `cat > /workspace/AGENTS.md << 'AGENTS_EOF'\n${params.systemPrompt}\nAGENTS_EOF`
+      );
     }
 
     // Start OpenCode server, wait for it, and create session - all in one command

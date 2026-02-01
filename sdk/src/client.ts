@@ -124,6 +124,7 @@ export class Tabbi {
       body: JSON.stringify({
         repo: options.repo,
         gitToken: options.gitToken,
+        systemPrompt: options.systemPrompt,
       }),
     });
 

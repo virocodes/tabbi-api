@@ -25,7 +25,7 @@ function generateUUID() {
  *
  * @example
  * ```typescript
- * import { Tabbi } from "@tabbi/sdk";
+ * import { Tabbi } from "tabbi-sdk";
  *
  * const tabbi = new Tabbi({
  *   apiKey: "tb_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -103,6 +103,7 @@ export class Tabbi {
             body: JSON.stringify({
                 repo: options.repo,
                 gitToken: options.gitToken,
+                systemPrompt: options.systemPrompt,
             }),
         });
         if (!response.body) {

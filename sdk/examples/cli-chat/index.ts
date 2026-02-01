@@ -7,7 +7,8 @@
  *   npx ts-node index.ts
  *
  * Environment variables:
- *   TABBI_API_KEY - Your Tabbi API key (required)
+ *   TABBI_API_KEY  - Your Tabbi API key (required)
+ *   TABBI_BASE_URL - API base URL (optional, defaults to https://api.tabbi.dev)
  */
 
 import * as readline from "readline";
@@ -41,18 +42,25 @@ async function main() {
   }
 
   // Initialize the client
-  const tabbi = new Tabbi({ apiKey });
+  const baseUrl = process.env.TABBI_BASE_URL || "http://localhost:8787";
+  const tabbi = new Tabbi({ apiKey, baseUrl });
 
-  log("dim", "Connecting to: https://api.tabbi.dev");
+  log("dim", `Connecting to: ${baseUrl}`);
 
   log("cyan", "\n=== Tabbi CLI Chat ===\n");
   log("dim", "Creating a new session...\n");
+
+  // System prompt that defines Tabbi's behavior
+  const systemPrompt = `You are Tabbi, a friendly and helpful AI coding assistant.
+
+Always be helpful and do your best to complete the user's request.`;
 
   // Create a session with SSE streaming (no polling needed)
   let session;
   try {
     const startTime = Date.now();
     session = await tabbi.createSession({
+      systemPrompt,
       onProgress: (event) => {
         log("dim", `  ${event.message}`);
       },

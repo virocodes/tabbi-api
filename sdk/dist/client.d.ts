@@ -8,7 +8,7 @@ import type { TabbiConfig, SessionInfo, CreateSessionOptions, SendMessageOptions
  *
  * @example
  * ```typescript
- * import { Tabbi } from "@tabbi/sdk";
+ * import { Tabbi } from "tabbi-sdk";
  *
  * const tabbi = new Tabbi({
  *   apiKey: "tb_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"

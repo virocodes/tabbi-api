@@ -19,6 +19,7 @@ export interface ValidationSchema<T> {
 export function validateCreateSessionRequest(input: unknown): ValidationResult<{
   repo?: string;
   gitToken?: string;
+  systemPrompt?: string;
 }> {
   const errors: string[] = [];
 
@@ -31,7 +32,7 @@ export function validateCreateSessionRequest(input: unknown): ValidationResult<{
   }
 
   const body = input as Record<string, unknown>;
-  const result: { repo?: string; gitToken?: string } = {};
+  const result: { repo?: string; gitToken?: string; systemPrompt?: string } = {};
 
   // Validate repo
   if (body.repo !== undefined) {
@@ -63,6 +64,18 @@ export function validateCreateSessionRequest(input: unknown): ValidationResult<{
         errors.push("gitToken contains invalid characters");
       }
       result.gitToken = body.gitToken;
+    }
+  }
+
+  // Validate systemPrompt
+  if (body.systemPrompt !== undefined) {
+    if (typeof body.systemPrompt !== "string") {
+      errors.push("systemPrompt must be a string");
+    } else if (body.systemPrompt.length > 0) {
+      if (body.systemPrompt.length > 50000) {
+        errors.push("systemPrompt must be at most 50000 characters");
+      }
+      result.systemPrompt = body.systemPrompt;
     }
   }
 

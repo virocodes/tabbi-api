@@ -57,6 +57,7 @@ sandbox.post("/", async (c) => {
       repo: body.repo,
       gitToken: body.gitToken,
       opencodeSessionId: body.opencodeSessionId,
+      systemPrompt: body.systemPrompt,
     });
     return c.json(result, 201);
   } catch (error) {

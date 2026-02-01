@@ -76,6 +76,19 @@ export interface CreateSessionOptions {
   gitToken?: string;
 
   /**
+   * System prompt that defines the agent's behavior and personality.
+   * This is written to AGENTS.md in the workspace and used as context.
+   *
+   * @example
+   * ```typescript
+   * const session = await tabbi.createSession({
+   *   systemPrompt: "You are a helpful coding assistant specialized in Python."
+   * });
+   * ```
+   */
+  systemPrompt?: string;
+
+  /**
    * Callback function invoked for progress updates during session creation.
    * Use this to show progress to users while the sandbox is being created.
    *

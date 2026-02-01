@@ -10,6 +10,7 @@ export interface CreateSandboxParams {
   repo?: string;
   gitToken?: string;
   opencodeSessionId?: string;
+  systemPrompt?: string;
 }
 
 export interface CreateSandboxResponse {
