@@ -9,7 +9,7 @@
   "excludeInternal": true,
   "hideGenerator": true,
   "navigationLinks": {
-    "GitHub": "https://github.com/tabbi-ai/tabbi",
+    "GitHub": "https://github.com/virocodes/tabbi-api",
     "API Docs": "https://api.tabbi.dev/docs"
   },
   "customCss": "./typedoc.css"
