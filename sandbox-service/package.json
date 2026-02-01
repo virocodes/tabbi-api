@@ -8,7 +8,9 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc --noEmit",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "snapshot:build": "docker build --platform linux/amd64 -t tabbi-sandbox:1.0.0 -f Dockerfile.snapshot .",
+    "snapshot:push": "daytona snapshot push tabbi-sandbox:1.0.1 --name tabbi-dev-env-v2 --cpu 2 --memory 4 --disk 10"
   },
   "dependencies": {
     "@daytonaio/sdk": "^0.134.0",
