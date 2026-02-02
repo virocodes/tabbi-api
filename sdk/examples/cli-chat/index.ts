@@ -1,7 +1,8 @@
 /**
- * Simple CLI Chat Example
+ * Remotion CLI Chat Example
  *
- * A command-line interface for chatting with an AI agent.
+ * A command-line interface for chatting with an AI agent specialized in Remotion.
+ * The agent has access to Remotion best practices via skills.sh.
  *
  * Usage:
  *   npx ts-node index.ts
@@ -12,6 +13,8 @@
  */
 
 import * as readline from "readline";
+import * as fs from "fs/promises";
+import * as path from "path";
 import { Tabbi, TabbiError } from "tabbi-sdk";
 import type { SSEEvent } from "tabbi-sdk";
 
@@ -42,7 +45,7 @@ async function main() {
   }
 
   // Initialize the client
-  const baseUrl = process.env.TABBI_BASE_URL || "http://localhost:8787";
+  const baseUrl = process.env.TABBI_BASE_URL || "https://api.tabbi.dev";
   const tabbi = new Tabbi({ apiKey, baseUrl });
 
   log("dim", `Connecting to: ${baseUrl}`);
@@ -51,7 +54,15 @@ async function main() {
   log("dim", "Creating a new session...\n");
 
   // System prompt that defines Tabbi's behavior
-  const systemPrompt = `You are Tabbi, a friendly and helpful AI coding assistant.
+  const systemPrompt = `You are Tabbi, a friendly and helpful AI assistant specialized in Remotion video creation.
+
+You have access to Remotion best practices via the remotion-best-practices skill.
+
+You should be able to help with:
+- Creating Remotion projects and compositions
+- Writing React components for video animations
+- Rendering videos with various configurations
+- Troubleshooting Remotion issues
 
 Always be helpful and do your best to complete the user's request.`;
 
@@ -61,6 +72,8 @@ Always be helpful and do your best to complete the user's request.`;
     const startTime = Date.now();
     session = await tabbi.createSession({
       systemPrompt,
+      // Install Remotion best practices skill from skills.sh
+      skills: ["remotion-dev/skills"],
       onProgress: (event) => {
         log("dim", `  ${event.message}`);
       },
@@ -84,10 +97,11 @@ Always be helpful and do your best to complete the user's request.`;
   });
 
   log("cyan", "Type your messages to the agent. Commands:");
-  log("dim", "  /files [path]  - List files in workspace");
-  log("dim", "  /read <path>   - Read a file");
-  log("dim", "  /status        - Show session status");
-  log("dim", "  /quit          - Exit and cleanup\n");
+  log("dim", "  /files [path]     - List files in workspace");
+  log("dim", "  /read <path>      - Read a text file");
+  log("dim", "  /download <path>  - Download a file (images, videos, etc.)");
+  log("dim", "  /status           - Show session status");
+  log("dim", "  /quit             - Exit and cleanup\n");
 
   const prompt = () => {
     rl.question(`${colors.blue}You: ${colors.reset}`, async (input) => {
@@ -166,6 +180,35 @@ Always be helpful and do your best to complete the user's request.`;
         } catch (error) {
           if (error instanceof TabbiError) {
             log("red", `Error reading file: ${error.message}`);
+          }
+        }
+        break;
+      }
+
+      case "/download": {
+        if (!arg) {
+          log("yellow", "Usage: /download <path>");
+          log("dim", "Example: /download /out/video.mp4");
+          break;
+        }
+        try {
+          log("dim", `\nDownloading ${arg}...`);
+          const blob = await session.getFile(arg);
+          const arrayBuffer = await blob.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+
+          // Save to current directory with the filename
+          const filename = path.basename(arg);
+          const outputPath = path.join(process.cwd(), filename);
+          await fs.writeFile(outputPath, buffer);
+
+          const sizeKB = (buffer.length / 1024).toFixed(2);
+          log("green", `Downloaded: ${outputPath} (${sizeKB} KB)\n`);
+        } catch (error) {
+          if (error instanceof TabbiError) {
+            log("red", `Error downloading file: ${error.message}`);
+          } else {
+            log("red", `Error downloading file: ${error}`);
           }
         }
         break;
