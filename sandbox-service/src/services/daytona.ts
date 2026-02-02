@@ -192,9 +192,9 @@ export class DaytonaSandboxService {
     let skillsInstallScript = "";
     if (params.skills && params.skills.length > 0) {
       console.log("[daytona] Will install skills", { skills: params.skills });
-      // Install each skill from skills.sh
+      // Install each skill from skills.sh with a 30s timeout per skill to prevent hangs
       skillsInstallScript = params.skills
-        .map((skill) => `npx skills add ${skill} -a opencode -y 2>/dev/null || echo "Skill install warning: ${skill}"`)
+        .map((skill) => `timeout 30 npx skills add ${skill} -a opencode -y 2>/dev/null || echo "Skill install skipped: ${skill}"`)
         .join("\n");
     }
 

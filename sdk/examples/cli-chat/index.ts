@@ -73,7 +73,8 @@ Always be helpful and do your best to complete the user's request.`;
     session = await tabbi.createSession({
       systemPrompt,
       // Install Remotion best practices skill from skills.sh
-      skills: ["remotion-dev/skills"],
+      // Temporarily disabled - uncomment once skill installation is verified
+      // skills: ["remotion-dev/skills"],
       onProgress: (event) => {
         log("dim", `  ${event.message}`);
       },
