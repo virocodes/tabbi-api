@@ -5,7 +5,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { v4 as uuidv4 } from "uuid";
-import type { SessionState, Message, APIError, FileInfo, Env } from "./types";
+import type { SessionState, Message, APIError, FileInfo, Env, McpServerConfig, AgentConfig } from "./types";
 import { SandboxProxyClient } from "./services/sandbox-proxy";
 import { logger, Logger } from "./utils/logger";
 
@@ -191,6 +191,9 @@ export class SessionAgent extends DurableObject {
       repo?: string;
       gitToken?: string;
       systemPrompt?: string;
+      mcpServers?: Record<string, McpServerConfig>;
+      agents?: Record<string, AgentConfig>;
+      skills?: string[];
       anthropicApiKey: string;
       sandboxServiceUrl: string;
       sandboxServiceApiKey: string;
@@ -244,7 +247,7 @@ export class SessionAgent extends DurableObject {
 
     // Start sandbox creation in background
     this.ctx.waitUntil(
-      this.createSandbox(config, body.repo, body.gitToken, undefined, body.systemPrompt)
+      this.createSandbox(config, body.repo, body.gitToken, undefined, body.systemPrompt, body.mcpServers, body.agents, body.skills)
     );
 
     return Response.json(state, { status: 201 });
@@ -261,6 +264,9 @@ export class SessionAgent extends DurableObject {
       repo?: string;
       gitToken?: string;
       systemPrompt?: string;
+      mcpServers?: Record<string, McpServerConfig>;
+      agents?: Record<string, AgentConfig>;
+      skills?: string[];
       anthropicApiKey: string;
       sandboxServiceUrl: string;
       sandboxServiceApiKey: string;
@@ -348,6 +354,9 @@ export class SessionAgent extends DurableObject {
           repo: body.repo,
           gitToken: body.gitToken,
           systemPrompt: body.systemPrompt,
+          mcpServers: body.mcpServers,
+          agents: body.agents,
+          skills: body.skills,
         });
 
         const currentState = await this.getState();
@@ -419,7 +428,10 @@ export class SessionAgent extends DurableObject {
     repo?: string,
     gitToken?: string,
     existingOpencodeSessionId?: string,
-    systemPrompt?: string
+    systemPrompt?: string,
+    mcpServers?: Record<string, McpServerConfig>,
+    agents?: Record<string, AgentConfig>,
+    skills?: string[]
   ): Promise<void> {
     const proxy = new SandboxProxyClient(
       config.sandboxServiceUrl,
@@ -434,6 +446,9 @@ export class SessionAgent extends DurableObject {
         gitToken,
         opencodeSessionId: existingOpencodeSessionId,
         systemPrompt,
+        mcpServers,
+        agents,
+        skills,
       });
 
       const state = await this.getState();

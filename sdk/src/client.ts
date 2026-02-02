@@ -125,6 +125,9 @@ export class Tabbi {
         repo: options.repo,
         gitToken: options.gitToken,
         systemPrompt: options.systemPrompt,
+        mcpServers: options.mcpServers,
+        agents: options.agents,
+        skills: options.skills,
       }),
     });
 

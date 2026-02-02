@@ -4,6 +4,7 @@
  */
 
 import { logger } from "../utils/logger";
+import type { McpServerConfig, AgentConfig } from "../types";
 
 export interface CreateSandboxParams {
   anthropicApiKey: string;
@@ -11,6 +12,9 @@ export interface CreateSandboxParams {
   gitToken?: string;
   opencodeSessionId?: string;
   systemPrompt?: string;
+  mcpServers?: Record<string, McpServerConfig>;
+  agents?: Record<string, AgentConfig>;
+  skills?: string[];
 }
 
 export interface CreateSandboxResponse {

@@ -10,6 +10,8 @@ import type {
   ExecuteCommandResponse,
   FileInfo,
   LogsResponse,
+  McpServerConfig,
+  AgentConfig,
 } from "../types";
 
 export interface DaytonaServiceConfig {
@@ -54,6 +56,9 @@ export class DaytonaSandboxService {
     gitToken?: string;
     opencodeSessionId?: string;
     systemPrompt?: string;
+    mcpServers?: Record<string, McpServerConfig>;
+    agents?: Record<string, AgentConfig>;
+    skills?: string[];
   }): Promise<CreateSandboxResponse> {
     console.log("[daytona] Creating sandbox", { repo: params.repo || "empty" });
 
@@ -156,15 +161,55 @@ export class DaytonaSandboxService {
       : "";
     console.log("[daytona] Starting OpenCode server with inline session creation", {
       sessionId: params.opencodeSessionId || "new",
+      hasMcpServers: !!params.mcpServers && Object.keys(params.mcpServers).length > 0,
+      hasAgents: !!params.agents && Object.keys(params.agents).length > 0,
+      skillsCount: params.skills?.length || 0,
     });
+
+    // Build OpenCode configuration object
+    const opencodeConfig: {
+      server: { port: number; hostname: string };
+      mcp?: Record<string, McpServerConfig>;
+      agent?: Record<string, AgentConfig>;
+    } = {
+      server: { port: 4096, hostname: "0.0.0.0" },
+    };
+
+    // Add MCP servers if provided
+    if (params.mcpServers && Object.keys(params.mcpServers).length > 0) {
+      opencodeConfig.mcp = params.mcpServers;
+    }
+
+    // Add agents if provided
+    if (params.agents && Object.keys(params.agents).length > 0) {
+      opencodeConfig.agent = params.agents;
+    }
+
+    // Escape the config for shell (using a heredoc with a quoted delimiter prevents variable expansion)
+    const configJson = JSON.stringify(opencodeConfig, null, 2);
+
+    // Build skills installation commands
+    let skillsInstallScript = "";
+    if (params.skills && params.skills.length > 0) {
+      console.log("[daytona] Will install skills", { skills: params.skills });
+      // Install each skill from skills.sh
+      skillsInstallScript = params.skills
+        .map((skill) => `npx skills add ${skill} -a opencode -y 2>/dev/null || echo "Skill install warning: ${skill}"`)
+        .join("\n");
+    }
 
     const startupScript = `
 cd /workspace
 
-# Create OpenCode configuration
-echo '{"server":{"port":4096,"hostname":"0.0.0.0"}}' > opencode.json
+# Create OpenCode configuration with MCP servers and agents
+cat > opencode.json << 'CONFIG_EOF'
+${configJson}
+CONFIG_EOF
 
-# Start OpenCode server in background
+${skillsInstallScript ? `# Install skills from skills.sh
+${skillsInstallScript}
+
+` : ""}# Start OpenCode server in background
 nohup opencode ${sessionArg} serve --port 4096 --hostname 0.0.0.0 > /tmp/opencode.log 2>&1 &
 
 # Poll locally until ready (fast - localhost is ~1ms vs ~200ms over network)

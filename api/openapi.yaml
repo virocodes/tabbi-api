@@ -373,6 +373,56 @@ components:
           type: string
           description: Personal access token for private repositories
           example: "ghp_xxxxxxxxxxxx"
+        systemPrompt:
+          type: string
+          description: System prompt that defines the agent's behavior and personality
+          maxLength: 50000
+          example: "You are a helpful coding assistant specialized in Python."
+        mcpServers:
+          type: object
+          description: |
+            MCP (Model Context Protocol) servers to configure in OpenCode.
+            MCP servers provide additional capabilities like GitHub access, database queries, etc.
+          additionalProperties:
+            $ref: '#/components/schemas/McpServerConfig'
+          example:
+            github:
+              type: "local"
+              command: ["npx", "-y", "@modelcontextprotocol/server-github"]
+              environment:
+                GITHUB_TOKEN: "ghp_xxx"
+            jira:
+              type: "remote"
+              url: "https://jira.example.com/mcp"
+              headers:
+                Authorization: "Bearer xxx"
+        agents:
+          type: object
+          description: |
+            Custom agents to configure in OpenCode.
+            Agents are specialized AI personas with specific capabilities.
+          additionalProperties:
+            $ref: '#/components/schemas/AgentConfig'
+          example:
+            code-reviewer:
+              description: "Reviews code for best practices"
+              mode: "subagent"
+              prompt: "You are a code reviewer focused on security..."
+              tools:
+                write: false
+                edit: false
+        skills:
+          type: array
+          description: |
+            Skills to install from skills.sh.
+            Skills are pre-built capabilities that can be added to sessions.
+          items:
+            type: string
+            pattern: "^[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+(@[a-zA-Z0-9._-]+)?$"
+          maxItems: 20
+          example:
+            - "vercel-labs/react-best-practices"
+            - "anthropics/testing"
 
     CreateSessionResponse:
       type: object
@@ -493,6 +543,117 @@ components:
           message: "Creating sandbox..."
         timestamp: "2026-01-23T11:44:00.200Z"
 
+    McpServerConfig:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - local
+            - remote
+          description: |
+            Server type:
+            - `local`: Spawned as a subprocess using the `command` array
+            - `remote`: HTTP endpoint at the specified `url`
+        command:
+          type: array
+          items:
+            type: string
+          description: |
+            Command to execute for local servers.
+            Required when `type` is `local`.
+          example: ["npx", "-y", "@modelcontextprotocol/server-github"]
+        environment:
+          type: object
+          additionalProperties:
+            type: string
+          description: Environment variables for local servers
+          example:
+            GITHUB_TOKEN: "ghp_xxx"
+        url:
+          type: string
+          format: uri
+          description: |
+            URL for remote MCP servers.
+            Required when `type` is `remote`.
+          example: "https://mcp.example.com/api"
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: HTTP headers for remote servers
+          example:
+            Authorization: "Bearer xxx"
+        timeout:
+          type: integer
+          minimum: 1
+          description: Connection timeout in milliseconds
+          default: 5000
+        enabled:
+          type: boolean
+          description: Whether the server is enabled
+          default: true
+
+    AgentConfig:
+      type: object
+      required:
+        - description
+      properties:
+        description:
+          type: string
+          description: Description of what the agent does
+          maxLength: 1000
+          example: "Reviews code for best practices and security issues"
+        mode:
+          type: string
+          enum:
+            - primary
+            - subagent
+            - all
+          description: |
+            When this agent is available:
+            - `primary`: Only available as the main agent
+            - `subagent`: Only available for delegated tasks
+            - `all`: Available in both modes
+          default: "all"
+        model:
+          type: string
+          description: Model to use for this agent
+          maxLength: 100
+          example: "anthropic/claude-sonnet-4-5"
+        prompt:
+          type: string
+          description: System prompt for the agent
+          maxLength: 50000
+          example: "You are a senior code reviewer focused on security..."
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Temperature for model responses (0-1)
+          default: 0.7
+        tools:
+          type: object
+          additionalProperties:
+            type: boolean
+          description: Tool permissions for this agent
+          example:
+            write: false
+            edit: false
+        permission:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: string
+          description: Permission rules for specific commands
+          example:
+            bash:
+              "git *": "allow"
+              "rm -rf *": "deny"
+
     FileInfo:
       type: object
       required:
@@ -546,6 +707,7 @@ components:
     ErrorCode:
       type: string
       enum:
+        - VALIDATION_ERROR
         - INVALID_API_KEY
         - SESSION_NOT_OWNED
         - SESSION_NOT_FOUND
@@ -556,6 +718,7 @@ components:
         - SANDBOX_TIMEOUT
         - INTERNAL_ERROR
       description: |
+        - `VALIDATION_ERROR` - Request body validation failed
         - `INVALID_API_KEY` - API key is missing or invalid
         - `SESSION_NOT_OWNED` - Session belongs to a different API key
         - `SESSION_NOT_FOUND` - Session does not exist

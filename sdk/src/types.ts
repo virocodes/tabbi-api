@@ -4,6 +4,151 @@
  */
 
 // ============================================================================
+// OpenCode Configuration Types
+// ============================================================================
+
+/**
+ * MCP (Model Context Protocol) server configuration
+ *
+ * MCP servers provide additional capabilities to the AI agent by exposing
+ * tools, resources, and prompts. Servers can be either local (spawned as
+ * a subprocess) or remote (HTTP endpoints).
+ *
+ * @example
+ * ```typescript
+ * // Local MCP server (spawned as a subprocess)
+ * const githubMcp: McpServerConfig = {
+ *   type: "local",
+ *   command: ["npx", "-y", "@modelcontextprotocol/server-github"],
+ *   environment: { GITHUB_TOKEN: "ghp_xxx" }
+ * };
+ *
+ * // Remote MCP server (HTTP endpoint)
+ * const jiraMcp: McpServerConfig = {
+ *   type: "remote",
+ *   url: "https://jira.example.com/mcp",
+ *   headers: { Authorization: "Bearer xxx" }
+ * };
+ * ```
+ */
+export interface McpServerConfig {
+  /**
+   * Server type:
+   * - `local`: Spawned as a subprocess using the `command` array
+   * - `remote`: HTTP endpoint at the specified `url`
+   */
+  type: "local" | "remote";
+
+  /**
+   * Command to execute for local servers.
+   * Required when `type` is `"local"`.
+   * @example ["npx", "-y", "@modelcontextprotocol/server-github"]
+   */
+  command?: string[];
+
+  /**
+   * Environment variables for local servers.
+   * Useful for passing API keys and configuration to the subprocess.
+   * @example { GITHUB_TOKEN: "ghp_xxx", DEBUG: "true" }
+   */
+  environment?: Record<string, string>;
+
+  /**
+   * URL for remote MCP servers.
+   * Required when `type` is `"remote"`.
+   * @example "https://mcp.example.com/api"
+   */
+  url?: string;
+
+  /**
+   * HTTP headers for remote servers.
+   * Commonly used for authentication.
+   * @example { Authorization: "Bearer xxx" }
+   */
+  headers?: Record<string, string>;
+
+  /**
+   * Connection timeout in milliseconds.
+   * @defaultValue 5000
+   */
+  timeout?: number;
+
+  /**
+   * Whether the server is enabled.
+   * Set to `false` to temporarily disable a configured server.
+   * @defaultValue true
+   */
+  enabled?: boolean;
+}
+
+/**
+ * Agent configuration for OpenCode
+ *
+ * Agents are specialized AI personas with specific capabilities and behaviors.
+ * They can be configured as primary agents (main interaction mode) or subagents
+ * (delegated tasks).
+ *
+ * @example
+ * ```typescript
+ * const codeReviewer: AgentConfig = {
+ *   description: "Reviews code for best practices and security issues",
+ *   mode: "subagent",
+ *   model: "anthropic/claude-sonnet-4-5",
+ *   prompt: "You are a senior code reviewer focused on security...",
+ *   tools: { write: false, edit: false }  // Read-only access
+ * };
+ * ```
+ */
+export interface AgentConfig {
+  /**
+   * Description of what the agent does.
+   * This is shown in the agent list and used for routing.
+   */
+  description: string;
+
+  /**
+   * When this agent is available:
+   * - `primary`: Only available as the main agent
+   * - `subagent`: Only available for delegated tasks
+   * - `all`: Available in both modes
+   * @defaultValue "all"
+   */
+  mode?: "primary" | "subagent" | "all";
+
+  /**
+   * Model to use for this agent.
+   * @example "anthropic/claude-sonnet-4-5"
+   */
+  model?: string;
+
+  /**
+   * System prompt for the agent.
+   * Defines the agent's personality, expertise, and behavior.
+   */
+  prompt?: string;
+
+  /**
+   * Temperature for model responses (0-1).
+   * Lower values are more deterministic, higher values more creative.
+   * @defaultValue 0.7
+   */
+  temperature?: number;
+
+  /**
+   * Tool permissions for this agent.
+   * Set to `false` to disable specific tools.
+   * @example { write: false, edit: false }  // Read-only agent
+   */
+  tools?: Record<string, boolean>;
+
+  /**
+   * Permission rules for specific commands.
+   * @example { bash: { "git *": "allow", "rm -rf *": "deny" } }
+   */
+  permission?: Record<string, Record<string, string>>;
+}
+
+// ============================================================================
 // Configuration
 // ============================================================================
 
@@ -87,6 +232,69 @@ export interface CreateSessionOptions {
    * ```
    */
   systemPrompt?: string;
+
+  /**
+   * MCP (Model Context Protocol) servers to configure in the session.
+   * MCP servers provide additional capabilities like GitHub access, database queries, etc.
+   *
+   * @example
+   * ```typescript
+   * const session = await tabbi.createSession({
+   *   mcpServers: {
+   *     github: {
+   *       type: "local",
+   *       command: ["npx", "-y", "@modelcontextprotocol/server-github"],
+   *       environment: { GITHUB_TOKEN: "ghp_xxx" }
+   *     },
+   *     jira: {
+   *       type: "remote",
+   *       url: "https://jira.example.com/mcp",
+   *       headers: { Authorization: "Bearer xxx" }
+   *     }
+   *   }
+   * });
+   * ```
+   */
+  mcpServers?: Record<string, McpServerConfig>;
+
+  /**
+   * Custom agents to configure in OpenCode.
+   * Agents are specialized AI personas with specific capabilities.
+   *
+   * @example
+   * ```typescript
+   * const session = await tabbi.createSession({
+   *   agents: {
+   *     "code-reviewer": {
+   *       description: "Reviews code for best practices",
+   *       mode: "subagent",
+   *       prompt: "You are a code reviewer focused on security...",
+   *       tools: { write: false, edit: false }  // Read-only
+   *     }
+   *   }
+   * });
+   * ```
+   */
+  agents?: Record<string, AgentConfig>;
+
+  /**
+   * Skills to install from skills.sh.
+   * Skills are pre-built capabilities that can be added to sessions.
+   *
+   * @example
+   * ```typescript
+   * const session = await tabbi.createSession({
+   *   skills: [
+   *     "vercel-labs/react-best-practices",
+   *     "anthropics/testing",
+   *     "owner/custom-skill"
+   *   ]
+   * });
+   * ```
+   *
+   * @see https://skills.sh for available skills
+   */
+  skills?: string[];
 
   /**
    * Callback function invoked for progress updates during session creation.

@@ -4,6 +4,50 @@
  */
 
 // ============================================================================
+// OpenCode Configuration Types
+// ============================================================================
+
+/**
+ * MCP (Model Context Protocol) server configuration
+ */
+export interface McpServerConfig {
+  /** Server type: local (spawned process) or remote (HTTP endpoint) */
+  type: "local" | "remote";
+  /** Command to execute for local servers (e.g., ["npx", "-y", "@modelcontextprotocol/server-github"]) */
+  command?: string[];
+  /** Environment variables for local servers */
+  environment?: Record<string, string>;
+  /** URL for remote MCP servers */
+  url?: string;
+  /** HTTP headers for remote servers (e.g., Authorization) */
+  headers?: Record<string, string>;
+  /** Connection timeout in milliseconds */
+  timeout?: number;
+  /** Whether the server is enabled (default: true) */
+  enabled?: boolean;
+}
+
+/**
+ * Agent configuration for OpenCode
+ */
+export interface AgentConfig {
+  /** Description of what the agent does */
+  description: string;
+  /** When this agent is available: primary (main only), subagent (sub only), all (both) */
+  mode?: "primary" | "subagent" | "all";
+  /** Model to use (e.g., "anthropic/claude-sonnet-4-5") */
+  model?: string;
+  /** System prompt for the agent */
+  prompt?: string;
+  /** Temperature for model responses (0-1) */
+  temperature?: number;
+  /** Tool permissions (e.g., { write: true, edit: false }) */
+  tools?: Record<string, boolean>;
+  /** Permission rules (e.g., { bash: { "git *": "allow" } }) */
+  permission?: Record<string, Record<string, string>>;
+}
+
+// ============================================================================
 // Sandbox Types
 // ============================================================================
 
@@ -13,6 +57,12 @@ export interface CreateSandboxRequest {
   gitToken?: string;
   opencodeSessionId?: string;
   systemPrompt?: string;
+  /** MCP servers to configure in OpenCode */
+  mcpServers?: Record<string, McpServerConfig>;
+  /** Custom agents to configure in OpenCode */
+  agents?: Record<string, AgentConfig>;
+  /** Skills to install from skills.sh (e.g., ["vercel-labs/react-best-practices"]) */
+  skills?: string[];
 }
 
 export interface CreateSandboxResponse {
