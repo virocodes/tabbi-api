@@ -246,6 +246,7 @@ sandbox.get("/:id/files", async (c) => {
 /**
  * GET /sandbox/:id/files/read
  * Read file content from sandbox
+ * Returns { content, encoding } where encoding is "utf8" or "base64"
  */
 sandbox.get("/:id/files/read", async (c) => {
   const service = c.get("daytonaService");
@@ -263,8 +264,8 @@ sandbox.get("/:id/files/read", async (c) => {
   }
 
   try {
-    const content = await service.readFile(sandboxId, path);
-    return c.json({ content });
+    const result = await service.readFile(sandboxId, path);
+    return c.json({ content: result.content, encoding: result.encoding });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("not found")) {

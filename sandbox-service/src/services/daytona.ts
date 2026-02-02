@@ -457,9 +457,39 @@ exit 1
   }
 
   /**
-   * Read file content from sandbox
+   * Binary file extensions that should be read as base64
    */
-  async readFile(sandboxId: string, path: string): Promise<string> {
+  private static readonly BINARY_EXTENSIONS = new Set([
+    // Images
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".svg", ".tiff", ".tif",
+    // Video
+    ".mp4", ".webm", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".m4v",
+    // Audio
+    ".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".wma",
+    // Archives
+    ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar", ".xz",
+    // Documents
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    // Fonts
+    ".ttf", ".otf", ".woff", ".woff2", ".eot",
+    // Other binary
+    ".exe", ".dll", ".so", ".dylib", ".bin", ".dat", ".db", ".sqlite",
+    ".wasm", ".pyc", ".class", ".o", ".a",
+  ]);
+
+  /**
+   * Check if a file path has a binary extension
+   */
+  private isBinaryFile(path: string): boolean {
+    const ext = path.substring(path.lastIndexOf(".")).toLowerCase();
+    return DaytonaSandboxService.BINARY_EXTENSIONS.has(ext);
+  }
+
+  /**
+   * Read file content from sandbox
+   * Returns content with encoding info (utf8 for text, base64 for binary)
+   */
+  async readFile(sandboxId: string, path: string): Promise<{ content: string; encoding: "utf8" | "base64" }> {
     const sandbox = await this.getSandbox(sandboxId);
 
     // Check if file exists
@@ -471,9 +501,20 @@ exit 1
       throw new Error("File not found");
     }
 
-    // Read file content
-    const result = await sandbox.process.executeCommand(`cat ${path}`);
-    return result.result || "";
+    // Read binary files as base64, text files as plain text
+    if (this.isBinaryFile(path)) {
+      const result = await sandbox.process.executeCommand(`base64 -w 0 ${path}`);
+      return {
+        content: result.result || "",
+        encoding: "base64",
+      };
+    } else {
+      const result = await sandbox.process.executeCommand(`cat ${path}`);
+      return {
+        content: result.result || "",
+        encoding: "utf8",
+      };
+    }
   }
 
   /**

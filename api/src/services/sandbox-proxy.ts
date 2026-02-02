@@ -165,13 +165,14 @@ export class SandboxProxyClient {
 
   /**
    * Read file content from sandbox
+   * Returns content with encoding info (utf8 for text, base64 for binary)
    */
-  async readFile(sandboxId: string, path: string): Promise<string> {
-    const result = await this.request<{ content: string }>(
+  async readFile(sandboxId: string, path: string): Promise<{ content: string; encoding: "utf8" | "base64" }> {
+    const result = await this.request<{ content: string; encoding: "utf8" | "base64" }>(
       "GET",
       `/sandbox/${sandboxId}/files/read?path=${encodeURIComponent(path)}`
     );
-    return result.content;
+    return result;
   }
 
   /**

@@ -106,6 +106,8 @@ export interface ListFilesResponse {
 
 export interface ReadFileResponse {
   content: string;
+  /** Encoding of the content: "utf8" for text, "base64" for binary */
+  encoding: "utf8" | "base64";
 }
 
 export interface GetPreviewUrlResponse {

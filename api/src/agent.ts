@@ -9,6 +9,95 @@ import type { SessionState, Message, APIError, FileInfo, Env, McpServerConfig, A
 import { SandboxProxyClient } from "./services/sandbox-proxy";
 import { logger, Logger } from "./utils/logger";
 
+// MIME type mapping for common file extensions
+const MIME_TYPES: Record<string, string> = {
+  // Images
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".bmp": "image/bmp",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".svg": "image/svg+xml",
+  ".tiff": "image/tiff",
+  ".tif": "image/tiff",
+  // Video
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".avi": "video/x-msvideo",
+  ".mov": "video/quicktime",
+  ".mkv": "video/x-matroska",
+  ".flv": "video/x-flv",
+  ".wmv": "video/x-ms-wmv",
+  ".m4v": "video/x-m4v",
+  // Audio
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".flac": "audio/flac",
+  ".aac": "audio/aac",
+  ".m4a": "audio/mp4",
+  ".wma": "audio/x-ms-wma",
+  // Archives
+  ".zip": "application/zip",
+  ".tar": "application/x-tar",
+  ".gz": "application/gzip",
+  ".bz2": "application/x-bzip2",
+  ".7z": "application/x-7z-compressed",
+  ".rar": "application/vnd.rar",
+  ".xz": "application/x-xz",
+  // Documents
+  ".pdf": "application/pdf",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  // Fonts
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".eot": "application/vnd.ms-fontobject",
+  // Text/Code
+  ".txt": "text/plain",
+  ".html": "text/html",
+  ".htm": "text/html",
+  ".css": "text/css",
+  ".js": "text/javascript",
+  ".mjs": "text/javascript",
+  ".json": "application/json",
+  ".xml": "application/xml",
+  ".md": "text/markdown",
+  ".yaml": "text/yaml",
+  ".yml": "text/yaml",
+  ".ts": "text/typescript",
+  ".tsx": "text/typescript",
+  ".jsx": "text/javascript",
+  ".py": "text/x-python",
+  ".go": "text/x-go",
+  ".rs": "text/x-rust",
+  ".java": "text/x-java",
+  ".c": "text/x-c",
+  ".cpp": "text/x-c++",
+  ".h": "text/x-c",
+  ".hpp": "text/x-c++",
+  ".sh": "text/x-shellscript",
+  ".bash": "text/x-shellscript",
+  // Other
+  ".wasm": "application/wasm",
+};
+
+/**
+ * Get MIME type for a file path based on extension
+ */
+function getMimeType(path: string): string {
+  const ext = path.substring(path.lastIndexOf(".")).toLowerCase();
+  return MIME_TYPES[ext] || "application/octet-stream";
+}
+
 // SQLite schema for session state
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS session_state (
@@ -775,13 +864,25 @@ export class SessionAgent extends DurableObject {
     } else {
       try {
         const filePath = `/workspace${path}`;
-        const content = await proxy.readFile(state.sandboxId, filePath);
+        const result = await proxy.readFile(state.sandboxId, filePath);
+        const mimeType = getMimeType(path);
 
-        return new Response(content, {
-          headers: {
-            "Content-Type": "text/plain; charset=utf-8",
-          },
-        });
+        if (result.encoding === "base64") {
+          // Decode base64 for binary files
+          const binaryData = Uint8Array.from(atob(result.content), (c) => c.charCodeAt(0));
+          return new Response(binaryData, {
+            headers: {
+              "Content-Type": mimeType,
+            },
+          });
+        } else {
+          // Return text content as-is
+          return new Response(result.content, {
+            headers: {
+              "Content-Type": mimeType.startsWith("text/") ? `${mimeType}; charset=utf-8` : mimeType,
+            },
+          });
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
         if (message.includes("404") || message.includes("not found") || message.includes("FILE_NOT_FOUND")) {
