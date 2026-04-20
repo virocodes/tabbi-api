@@ -165,6 +165,7 @@ export class OpenCodeService {
     const encoder = new TextEncoder();
     let buffer = "";
     let receivedServerConnected = false;
+    let receivedRunning = false;
     let firstChunkReceived = false;
     const streamStartTime = Date.now();
 
@@ -200,6 +201,18 @@ export class OpenCodeService {
                   receivedServerConnected = true;
                 }
 
+                // Track when the session actually starts processing
+                // This prevents closing on the initial idle state before the message is sent
+                if (
+                  data.type === "session.running" ||
+                  data.type === "message.part.updated" ||
+                  (data.type === "session.status" &&
+                    (data.properties as Record<string, unknown>)?.status &&
+                    ((data.properties as Record<string, unknown>).status as Record<string, unknown>)?.type === "running")
+                ) {
+                  receivedRunning = true;
+                }
+
                 const transformed = transformOpenCodeEvent(data);
                 if (transformed) {
                   controller.enqueue(
@@ -207,12 +220,14 @@ export class OpenCodeService {
                   );
                 }
 
-                // Check for session.idle to close
-                if (receivedServerConnected) {
+                // Only close on session.idle AFTER we've seen the session start running
+                // Otherwise we'd close on the initial idle state before the message is processed
+                if (receivedServerConnected && receivedRunning) {
                   const isSessionIdle =
                     data.type === "session.idle" ||
                     (data.type === "session.status" &&
-                      data.properties?.status?.type === "idle");
+                      (data.properties as Record<string, unknown>)?.status &&
+                      ((data.properties as Record<string, unknown>).status as Record<string, unknown>)?.type === "idle");
 
                   if (isSessionIdle) {
                     controller.close();
